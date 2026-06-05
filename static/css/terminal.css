@@ -45,13 +45,20 @@ body { display: flex; flex-direction: column; }
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 6px 12px;
+  padding-top: max(6px, env(safe-area-inset-top));
   background: linear-gradient(90deg, #120d02, #0a0d12 60%);
   border-bottom: 1px solid var(--amber-dim);
 }
 .brand { font-weight: 600; letter-spacing: 2px; color: var(--amber); font-size: 15px; }
 .brand-mark { color: var(--cyan); }
 .brand-sub { color: var(--text-dim); font-size: 10px; letter-spacing: 3px; margin-left: 8px; }
-.topbar-stats { display: flex; gap: 16px; align-items: center; font-size: 11px; color: var(--text-dim); }
+.topbar-stats { display: flex; gap: 16px; align-items: center; font-size: 11px; color: var(--text-dim); flex-wrap: wrap; }
+#install-btn {
+  background: var(--cyan); color: #001; border: none; cursor: pointer;
+  font-family: var(--font); font-weight: 600; font-size: 10px; letter-spacing: 1px;
+  padding: 3px 8px; border-radius: 2px;
+}
+#install-btn:hover { background: #7eecff; }
 .topbar-stats b { color: var(--text); margin-left: 4px; }
 .pill { padding: 1px 6px; border-radius: 2px; }
 .pill.online  { background: rgba(61,220,132,.15); color: var(--green); }
@@ -191,8 +198,48 @@ body { display: flex; flex-direction: column; }
 .fnbar-spacer { flex: 1; }
 .fnbar-net { color: var(--green); font-size: 10px; letter-spacing: 1px; }
 .fnbar-net.stale { color: var(--amber); }
+.fnbar { padding-bottom: max(4px, env(safe-area-inset-bottom)); }
 
+/* ── TABLET ────────────────────────────────────────────────────────────── */
 @media (max-width: 1100px) {
-  .grid { grid-template-columns: 1fr; grid-auto-rows: minmax(220px, auto); overflow-y: auto; }
+  .grid { grid-template-columns: 1fr 1fr; grid-auto-rows: minmax(240px, 40vh); overflow-y: auto; }
+  #panel-console { grid-column: 1 / -1; }   /* console spans full width */
   html, body { overflow: auto; }
+}
+
+/* ── PHONE ─────────────────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  html, body { overflow: auto; font-size: 13px; }
+  body { min-height: 100vh; min-height: 100dvh; }
+
+  .brand { font-size: 13px; letter-spacing: 1px; }
+  .brand-sub { display: none; }
+  .topbar { flex-wrap: wrap; gap: 4px 10px; }
+  .topbar-stats { gap: 10px; font-size: 10px; }
+
+  .grid {
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 6px; overflow: visible;
+  }
+  /* Console first on a phone — it's the primary surface. */
+  #panel-console { order: -1; min-height: 56vh; }
+  #panel-news, #panel-surv { min-height: 44vh; }
+  .panel { min-height: 240px; }
+
+  /* Bigger touch targets; 16px input prevents mobile zoom-on-focus. */
+  #cmd { font-size: 16px; }
+  .console-input { padding: 10px 12px; }
+  .chip { padding: 4px 10px; font-size: 11px; }
+  .news-item { padding: 8px 6px; }
+
+  /* Function bar: horizontally scrollable strip of tap targets. */
+  .fnbar { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+  .fnbar button { padding: 6px 12px; white-space: nowrap; }
+  .fnbar-spacer { display: none; }
+  .fnbar-net { padding: 0 10px; white-space: nowrap; }
+}
+
+/* Standalone (installed PWA) — reclaim the browser chrome space. */
+@media (display-mode: standalone) {
+  .brand-sub { letter-spacing: 2px; }
 }

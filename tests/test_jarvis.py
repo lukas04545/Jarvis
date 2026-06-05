@@ -127,3 +127,32 @@ def test_index_serves_terminal(client):
     r = client.get("/")
     assert r.status_code == 200
     assert b"J.A.R.V.I.S" in r.data
+
+
+# ── Android / PWA surface ──────────────────────────────────────────────────
+def test_service_worker_served_at_root_scope(client):
+    r = client.get("/sw.js")
+    assert r.status_code == 200
+    assert "javascript" in r.headers["Content-Type"]
+    # Root scope is required for the worker to control the whole app.
+    assert r.headers.get("Service-Worker-Allowed") == "/"
+
+
+def test_manifest_is_valid_and_installable(client):
+    import json
+
+    r = client.get("/static/manifest.webmanifest")
+    assert r.status_code == 200
+    manifest = json.loads(r.data)
+    # Chrome's install criteria: name, start_url, standalone, 192 + 512 icons.
+    assert manifest["name"] and manifest["start_url"] == "/"
+    assert manifest["display"] == "standalone"
+    sizes = {ic["sizes"] for ic in manifest["icons"]}
+    assert {"192x192", "512x512"} <= sizes
+
+
+def test_index_links_pwa_assets(client):
+    body = client.get("/").data
+    assert b"manifest.webmanifest" in body
+    assert b'name="theme-color"' in body
+    assert b"/sw.js" in body

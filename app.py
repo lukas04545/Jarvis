@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 from typing import Iterator
 
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request, send_from_directory
 
 from config import config
 from jarvis import __version__, briefing, deepseek, news, surveillance
@@ -26,6 +26,16 @@ app = Flask(__name__)
 @app.route("/")
 def index():
     return render_template("index.html", version=__version__)
+
+
+@app.route("/sw.js")
+def service_worker():
+    # Served from root so the worker's scope covers the entire app, not /static.
+    resp = send_from_directory(app.static_folder + "/js", "sw.js")
+    resp.headers["Content-Type"] = "application/javascript"
+    resp.headers["Service-Worker-Allowed"] = "/"
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
 
 
 @app.route("/api/status")

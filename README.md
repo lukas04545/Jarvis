@@ -40,6 +40,45 @@ cp .env.example .env       # then paste your DeepSeek key into .env
 python app.py
 ```
 
+## Run on Android 📱
+
+J.A.R.V.I.S. runs on Android two ways — use either, or both together.
+
+### A) Install as an app (PWA)
+
+The terminal is a fully installable Progressive Web App with offline shell
+caching, a service worker, and a mobile-tuned layout (the console leads, the
+function bar becomes a scrollable tap strip).
+
+1. Start a Jarvis server somewhere reachable from the phone — your laptop on
+   the same Wi-Fi (`python app.py`), the phone itself (option B), or any host.
+2. Open `http://<server-ip>:8765` in **Chrome on Android**.
+3. Tap the **⤓ INSTALL** button in the top bar (or *menu → Add to Home screen*).
+4. Launch it from your home screen — it opens full-screen, no browser chrome,
+   with its own ◈ icon. Long-pressing the icon exposes shortcuts
+   (Briefing / Wire / Surveillance).
+
+> Installability needs HTTPS **or** `localhost`. Over plain-HTTP LAN, Chrome
+> still renders everything; for the install prompt put it behind HTTPS (e.g. a
+> `ngrok`/`cloudflared` tunnel) or run on-device (option B, served at
+> `localhost`).
+
+### B) Run the backend on the phone (Termux)
+
+Run the whole Flask backend natively on Android — no external server needed.
+
+```bash
+# In Termux (install from F-Droid):
+pkg install git
+git clone <this-repo> && cd Jarvis
+bash android/termux-setup.sh
+```
+
+The script installs Python + build tools, creates a venv, installs deps, takes
+a wake-lock, and serves on `http://localhost:8765` (and your LAN IP). Then
+install it to the home screen via option A — at `localhost` the install prompt
+works without HTTPS.
+
 ### Configuration (`.env`)
 
 | Variable | Default | Purpose |
@@ -84,10 +123,15 @@ jarvis/
   briefing.py           AI briefing synthesis from the live picture
   cache.py              thread-safe TTL cache (stale-on-error)
   fallback.py           SIMULATED sample datasets
-templates/index.html    terminal layout
-static/css/terminal.css Bloomberg-style phosphor UI
-static/js/terminal.js   client controller (feeds, console, SSE, commands)
-tests/test_jarvis.py    network-free unit + API tests
+templates/index.html    terminal layout (+ PWA meta + SW registration)
+static/css/terminal.css Bloomberg-style phosphor UI (+ mobile/PWA responsive)
+static/js/terminal.js   client controller (feeds, console, SSE, commands, install)
+static/js/sw.js         service worker (offline shell, network-first API)
+static/manifest.webmanifest  PWA manifest (icons, shortcuts)
+static/icons/*.png      generated app icons (any + maskable)
+tools/make_icons.py     dependency-free PNG icon generator
+android/termux-setup.sh on-device backend setup for Android/Termux
+tests/test_jarvis.py    network-free unit + API + PWA tests
 ```
 
 ## Tests

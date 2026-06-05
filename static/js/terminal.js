@@ -311,5 +311,28 @@
   bootConsole();
   refreshAll();
   setInterval(refreshAll, REFRESH_MS);
-  $("cmd").focus();
+
+  // PWA home-screen shortcuts deep-link in via ?cmd=BRIEF|NEWS|SURV.
+  const wanted = new URLSearchParams(location.search).get("cmd");
+  if (wanted) setTimeout(() => handleInput(wanted), 600);
+
+  // Android "Add to Home screen" — surface a one-tap install button when the
+  // browser offers it, instead of burying it in the menu.
+  let deferredPrompt = null;
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    const btn = $("install-btn");
+    if (!btn) return;
+    btn.hidden = false;
+    btn.addEventListener("click", async () => {
+      btn.hidden = true;
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+    });
+  });
+
+  // Don't steal focus / pop the keyboard on touch devices.
+  if (!window.matchMedia("(pointer: coarse)").matches) $("cmd").focus();
 })();
