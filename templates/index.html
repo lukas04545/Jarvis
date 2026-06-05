@@ -195,16 +195,20 @@
       </div>
 
       <div class="dev-panel">
-        <div class="panel-head"><span>▦ SCREEN SENSOR</span><span class="panel-meta" id="screen-state">idle</span></div>
+        <div class="panel-head"><span>▦ SCREEN SENSOR · JARVIS VISION</span><span class="panel-meta" id="screen-state">idle</span></div>
         <div class="rail-box">
           <video id="screen-video" class="dev-video" autoplay muted playsinline></video>
           <canvas id="screen-canvas" class="dev-video" hidden></canvas>
           <div class="dev-actions">
             <button id="screen-start" class="btn-primary">⊕ CAPTURE SCREEN</button>
             <button id="screen-snap" class="btn-ghost" disabled>◉ SNAPSHOT</button>
+            <button id="screen-read" class="btn-ghost" disabled>👁 SEE SCREEN</button>
+            <button id="screen-ask" class="btn-ghost" disabled>→ ASK JARVIS</button>
             <button id="screen-stop" class="btn-ghost" disabled>■ STOP</button>
           </div>
-          <p class="dev-note">Browser-permissioned screen share of <b>your own</b> display. Frames stay on this device — nothing is uploaded to the server.</p>
+          <div class="rail-box vision-box" id="screen-vision" hidden></div>
+          <div class="rail-box vision-box" id="screen-answer" hidden></div>
+          <p class="dev-note">Browser-permissioned screen share of <b>your own</b> display. <b>SEE SCREEN</b> reads it on-device (OCR + visual analysis) — the image never leaves your device. Only when you press <b>ASK JARVIS</b> is the extracted text sent to the AI.</p>
         </div>
       </div>
 
@@ -213,12 +217,20 @@
         <div class="rail-box">
           <div class="voice-transcript" id="voice-transcript">Tap LISTEN and speak a tasking…</div>
           <div class="dev-actions">
+            <label class="lang-label">LANG
+              <select id="lang-select">
+                <option value="en">English</option>
+                <option value="de">Deutsch</option>
+                <option value="es">Español</option>
+                <option value="fr">Français</option>
+              </select>
+            </label>
             <button id="voice-start" class="btn-primary">🎤 LISTEN</button>
             <button id="voice-stop" class="btn-ghost" disabled>■ STOP</button>
             <button id="voice-task" class="btn-ghost" disabled>→ TASK AGENTS</button>
             <button id="voice-chat" class="btn-ghost" disabled>→ CONSOLE</button>
           </div>
-          <p class="dev-note">Uses your browser's speech recognition. The transcript becomes JARVIS input — route it to the agent mesh or the console.</p>
+          <p class="dev-note">Uses your browser's speech recognition in the selected language (also sets the OCR language for SEE SCREEN). The transcript becomes JARVIS input — route it to the agent mesh or the console.</p>
         </div>
       </div>
 

@@ -31,6 +31,7 @@
 | **Maximised data ingestion** | ~24 news feeds (wires, finance, conflict, cyber, space, science, health) pulled **concurrently**, plus **markets** (CoinGecko crypto + Stooq indices/commodities/FX) and **GDELT** global media volume & tone. |
 | **⌬ Agent Mesh** | A multi-agent harness: Director J.A.R.V.I.S. routes a tasking to **11 specialist subagents** (GEOINT, ECONINT, GEOPHYS, CYBER, ORACLE, OSINT, MEDINT, ENERGY, CLIMATE, SENTINEL, REDCELL), each with its own persona and data tools, run **concurrently** over DeepSeek and streamed live (SSE) — then fused into one attributed briefing. |
 | **⊟ Device Sensors** | Consent-gated access to the operator's **own** device via standard browser APIs: memory/hardware/screen/network/power telemetry, **screen capture** (`getDisplayMedia`, frames stay local), and **voice input** (Web Speech API → JARVIS) plus a local input-activity meter. Telemetry syncs to the **SENTINEL** agent. See [Ethics & scope](#ethics--scope). |
+| **👁 JARVIS Vision** | Makes JARVIS *see* the shared screen — **on-device** OCR (Tesseract.js) extracts the on-screen text and a pixel-level visual summary (resolution, theme, dominant colour); the image never leaves the device. Press **ASK JARVIS** to send the extracted text to the AI for analysis. Multi-language (EN/DE/ES/FR) for both speech-to-text and OCR. |
 
 ## Quick start
 
@@ -243,3 +244,6 @@ covert collection tool.
   specs, screen geometry, network class, battery, input-rate counters) is sent
   to the local server for the SENTINEL agent. The input meter counts event
   *rates* only — it is not a keylogger and never captures or transmits content.
+- **JARVIS Vision** reads the screen with **on-device OCR** (Tesseract.js runs in
+  the browser); the captured image is never uploaded. The extracted text is only
+  sent to the AI when the operator explicitly presses **ASK JARVIS**.

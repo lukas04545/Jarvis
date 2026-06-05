@@ -20,6 +20,19 @@ window.JarvisDevice = (() => {
   let rec = null, recognizing = false, transcript = "";
   const keyTimes = [], ptrTimes = [];
   let lastPtr = 0;
+  let tessLoading = null, lastVision = null;
+
+  // Language map drives BOTH speech recognition (BCP-47) and OCR (Tesseract).
+  const LANGS = {
+    en: { speech: "en-US", ocr: "eng" },
+    de: { speech: "de-DE", ocr: "deu" },
+    es: { speech: "es-ES", ocr: "spa" },
+    fr: { speech: "fr-FR", ocr: "fra" },
+  };
+  function curLang() {
+    const s = $("lang-select");
+    return LANGS[(s && s.value) || "en"] || LANGS.en;
+  }
 
   // ── input activity meter (this page only) ─────────────────────────────
   const onKey = () => keyTimes.push(Date.now());
@@ -120,6 +133,7 @@ window.JarvisDevice = (() => {
       const v = $("screen-video"); v.srcObject = screenStream;
       $("screen-state").textContent = "● LIVE";
       $("screen-snap").disabled = false; $("screen-stop").disabled = false; $("screen-start").disabled = true;
+      $("screen-read").disabled = false;
       screenStream.getVideoTracks()[0].addEventListener("ended", stopScreen);
       refresh();
     } catch (e) { $("screen-state").textContent = "denied"; }
@@ -136,14 +150,143 @@ window.JarvisDevice = (() => {
     const v = $("screen-video"); if (v) v.srcObject = null;
     $("screen-state").textContent = "idle";
     $("screen-snap").disabled = true; $("screen-stop").disabled = true; $("screen-start").disabled = false;
+    $("screen-read").disabled = true; $("screen-ask").disabled = true;
+    $("screen-vision").hidden = true; $("screen-answer").hidden = true;
     refresh();
+  }
+
+  // ── JARVIS VISION — make JARVIS "see" the screen (local OCR + pixel stats) ─
+  function loadTesseract() {
+    if (window.Tesseract) return Promise.resolve(true);
+    if (tessLoading) return tessLoading;
+    tessLoading = new Promise((res) => {
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+      s.onload = () => res(true);
+      s.onerror = () => res(false);
+      document.head.appendChild(s);
+    });
+    return tessLoading;
+  }
+
+  function grabFrame(maxW) {
+    const v = $("screen-video");
+    if (!v || !v.videoWidth) return null;
+    const scale = Math.min(1, (maxW || 1280) / v.videoWidth);
+    const c = document.createElement("canvas");
+    c.width = Math.round(v.videoWidth * scale);
+    c.height = Math.round(v.videoHeight * scale);
+    c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+    return c;
+  }
+
+  const COLORS = [
+    ["black", 0, 0, 0], ["white", 255, 255, 255], ["grey", 128, 128, 128],
+    ["red", 200, 40, 40], ["green", 40, 160, 70], ["blue", 40, 90, 200],
+    ["cyan", 40, 180, 200], ["amber", 230, 160, 30], ["purple", 130, 60, 180],
+  ];
+  function colorName(r, g, b) {
+    let best = "grey", d = 1e9;
+    for (const [name, cr, cg, cb] of COLORS) {
+      const dist = (r - cr) ** 2 + (g - cg) ** 2 + (b - cb) ** 2;
+      if (dist < d) { d = dist; best = name; }
+    }
+    return best;
+  }
+
+  function visualSummary(canvas, origW, origH) {
+    const { width, height } = canvas;
+    const img = canvas.getContext("2d").getImageData(0, 0, width, height).data;
+    let r = 0, g = 0, b = 0, lum = 0, n = 0;
+    const step = Math.max(1, Math.floor((width * height) / 40000)) * 4;
+    for (let i = 0; i < img.length; i += step) {
+      r += img[i]; g += img[i + 1]; b += img[i + 2];
+      lum += 0.2126 * img[i] + 0.7152 * img[i + 1] + 0.0722 * img[i + 2];
+      n++;
+    }
+    r = Math.round(r / n); g = Math.round(g / n); b = Math.round(b / n);
+    const L = +(lum / n / 255).toFixed(2);
+    return {
+      width: origW, height: origH, avgColor: [r, g, b], brightness: L,
+      theme: L < 0.4 ? "dark" : (L > 0.6 ? "light" : "mixed"),
+      dominant: colorName(r, g, b),
+    };
+  }
+
+  function visionRows(vis, textInfo) {
+    return `<div class="vision-head">👁 JARVIS VISION</div>` +
+      `<div class="kv"><span>RESOLUTION</span><b>${vis.width}×${vis.height}</b></div>` +
+      `<div class="kv"><span>THEME</span><b>${vis.theme} (lum ${vis.brightness})</b></div>` +
+      `<div class="kv"><span>DOMINANT</span><b><span class="swatch" style="background:rgb(${vis.avgColor.join(",")})"></span> ${vis.dominant} · rgb(${vis.avgColor.join(", ")})</b></div>` +
+      `<div class="kv"><span>TEXT</span><b id="vision-ocr">${textInfo}</b></div>`;
+  }
+
+  async function analyzeScreen() {
+    const v = $("screen-video");
+    const box = $("screen-vision");
+    box.hidden = false;
+    if (!v || !v.videoWidth) { box.innerHTML = '<span class="err">Start screen capture first.</span>'; return; }
+    const origW = v.videoWidth, origH = v.videoHeight;
+    const canvas = grabFrame(1280);
+    const vis = visualSummary(canvas, origW, origH);
+    box.innerHTML = visionRows(vis, "reading…");
+
+    const lang = curLang().ocr;
+    let text = "", ocrOk = true;
+    const ok = await loadTesseract();
+    if (ok && window.Tesseract) {
+      try {
+        const { data } = await Tesseract.recognize(canvas, lang, {
+          logger: (m) => {
+            if (m.status === "recognizing text") {
+              const el = $("vision-ocr");
+              if (el) el.textContent = `OCR ${Math.round(m.progress * 100)}%`;
+            }
+          },
+        });
+        text = (data.text || "").replace(/[ \t]+\n/g, "\n").replace(/\n{2,}/g, "\n").trim();
+      } catch (e) { ocrOk = false; }
+    } else { ocrOk = false; }
+
+    lastVision = { vis, text };
+    const info = text ? `${text.split(/\s+/).filter(Boolean).length} words (${lang})`
+                      : (ocrOk ? "no text detected" : "OCR unavailable offline");
+    box.innerHTML = visionRows(vis, info) +
+      (text ? `<div class="vision-text">${esc(text).slice(0, 5000)}</div>` : "");
+    $("screen-ask").disabled = false;
+  }
+
+  async function askJarvisScreen() {
+    if (!lastVision) return;
+    const { vis, text } = lastVision;
+    const ans = $("screen-answer");
+    ans.hidden = false;
+    ans.innerHTML = '<span class="cursor">▌</span> JARVIS analysing the screen…';
+    const prompt =
+      "I'm sharing what is currently on my screen so you can see it.\n" +
+      `Visual: ${vis.width}x${vis.height}, ${vis.theme} theme, dominant colour ${vis.dominant} ` +
+      `rgb(${vis.avgColor.join(",")}).\n` +
+      (text ? `On-screen text (on-device OCR):\n"""\n${text.slice(0, 4000)}\n"""\n`
+            : "No readable text was detected on screen.\n") +
+      "Describe what I appear to be looking at and flag anything notable.";
+    try {
+      const r = await fetch("/api/chat", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: prompt }),
+      });
+      const d = await r.json();
+      ans.innerHTML = `<div class="vision-head">JARVIS&gt; ANALYSIS</div>` +
+        `<div class="vision-text">${esc(d.reply || d.error || "(no reply)").replace(/\n/g, "<br>")}</div>`;
+    } catch (e) {
+      ans.innerHTML = `<span class="err">analysis failed: ${esc(e.message)}</span>`;
+    }
   }
 
   // ── voice input (Web Speech API → JARVIS input) ───────────────────────
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   function startVoice() {
     if (!SR) { $("voice-state").textContent = "unsupported in this browser"; return; }
-    rec = new SR(); rec.lang = "en-US"; rec.continuous = true; rec.interimResults = true;
+    rec = new SR(); rec.lang = curLang().speech; rec.continuous = true; rec.interimResults = true;
     rec.onresult = (e) => {
       let txt = "";
       for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
@@ -179,6 +322,8 @@ window.JarvisDevice = (() => {
     $("dev-refresh").addEventListener("click", refresh);
     $("screen-start").addEventListener("click", startScreen);
     $("screen-snap").addEventListener("click", snapshot);
+    $("screen-read").addEventListener("click", analyzeScreen);
+    $("screen-ask").addEventListener("click", askJarvisScreen);
     $("screen-stop").addEventListener("click", stopScreen);
     $("voice-start").addEventListener("click", startVoice);
     $("voice-stop").addEventListener("click", stopVoice);
