@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>J.A.R.V.I.S. // GLOBAL INTELLIGENCE TERMINAL</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/terminal.css') }}" />
+</head>
+<body>
+  <div id="scanlines"></div>
+
+  <!-- ── TOP STATUS BAR ───────────────────────────────────────────────── -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">◈</span> J.A.R.V.I.S.
+      <span class="brand-sub">GLOBAL INTELLIGENCE TERMINAL</span>
+    </div>
+    <div class="topbar-stats">
+      <span class="stat">UTC <b id="clock">--:--:--</b></span>
+      <span class="stat">AI CORE <b id="ai-status" class="pill">····</b></span>
+      <span class="stat">POSTURE <b id="posture" class="pill">····</b></span>
+      <span class="stat">SENSORS <b id="sensors">-/-</b></span>
+      <span class="stat">v{{ version }}</span>
+    </div>
+  </header>
+
+  <!-- ── NEWS TICKER ──────────────────────────────────────────────────── -->
+  <div class="ticker">
+    <span class="ticker-label">WORLD WIRE</span>
+    <div class="ticker-track"><span id="ticker-text">Establishing uplink to global feeds…</span></div>
+  </div>
+
+  <!-- ── MAIN GRID ────────────────────────────────────────────────────── -->
+  <main class="grid">
+
+    <!-- LEFT: WORLD WIRE -->
+    <section class="panel" id="panel-news">
+      <div class="panel-head">
+        <span>① WORLD WIRE</span>
+        <span class="panel-meta" id="news-meta">--</span>
+      </div>
+      <div class="filters" id="news-filters">
+        <button class="chip active" data-topic="">ALL</button>
+        <button class="chip" data-topic="CONFLICT">CONFLICT</button>
+        <button class="chip" data-topic="MARKETS">MARKETS</button>
+        <button class="chip" data-topic="POLITICS">POLITICS</button>
+        <button class="chip" data-topic="DISASTER">DISASTER</button>
+        <button class="chip" data-topic="TECH">TECH</button>
+      </div>
+      <div class="panel-body" id="news-list">
+        <div class="loading">SCANNING WIRES…</div>
+      </div>
+    </section>
+
+    <!-- CENTER: AI CONSOLE + BRIEFING -->
+    <section class="panel" id="panel-console">
+      <div class="panel-head">
+        <span>② J.A.R.V.I.S. AI CONSOLE</span>
+        <span class="panel-meta" id="console-meta">deepseek</span>
+      </div>
+      <div class="panel-body console" id="console-log"></div>
+      <div class="console-input">
+        <span class="prompt">OPR&gt;</span>
+        <input id="cmd" autocomplete="off" spellcheck="false"
+               placeholder="type a message, or a command (HELP, NEWS, SURV, BRIEF, CLEAR)…" />
+      </div>
+    </section>
+
+    <!-- RIGHT: SURVEILLANCE -->
+    <section class="panel" id="panel-surv">
+      <div class="panel-head">
+        <span>③ GLOBAL SURVEILLANCE</span>
+        <span class="panel-meta" id="surv-meta">--</span>
+      </div>
+      <div class="panel-body" id="surv-body">
+        <div class="loading">ACQUIRING SENSORS…</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ── FUNCTION BAR ─────────────────────────────────────────────────── -->
+  <footer class="fnbar" id="fnbar">
+    <button data-cmd="HELP"><b>F1</b> HELP</button>
+    <button data-cmd="NEWS"><b>F2</b> WIRE</button>
+    <button data-cmd="SURV"><b>F3</b> SURV</button>
+    <button data-cmd="BRIEF"><b>F4</b> BRIEF</button>
+    <button data-cmd="REFRESH"><b>F5</b> REFRESH</button>
+    <button data-cmd="CLEAR"><b>F6</b> CLEAR</button>
+    <span class="fnbar-spacer"></span>
+    <span class="fnbar-net" id="net-indicator">● LIVE</span>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/terminal.js') }}"></script>
+</body>
+</html>
