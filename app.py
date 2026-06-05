@@ -18,7 +18,16 @@ from typing import Iterator
 from flask import Flask, Response, jsonify, render_template, request, send_from_directory
 
 from config import config
-from jarvis import __version__, briefing, deepseek, news, surveillance
+from jarvis import (
+    __version__,
+    briefing,
+    deepseek,
+    news,
+    runtime,
+    satellite,
+    surveillance,
+    webcams,
+)
 
 app = Flask(__name__)
 
@@ -40,15 +49,43 @@ def service_worker():
 
 @app.route("/api/status")
 def api_status():
+    online = runtime.ai_online()
     return jsonify(
         {
             "system": "JARVIS",
             "version": __version__,
-            "ai_core": "ONLINE" if config.ai_online() else "OFFLINE",
-            "model": config.DEEPSEEK_MODEL if config.ai_online() else None,
+            "ai_core": "ONLINE" if online else "OFFLINE",
+            "model": config.DEEPSEEK_MODEL if online else None,
             "cache_ttl": config.CACHE_TTL,
+            "providers": runtime.status(),
         }
     )
+
+
+@app.route("/api/settings", methods=["GET"])
+def api_get_settings():
+    # Never returns key material — only configured/source flags.
+    return jsonify(runtime.status())
+
+
+@app.route("/api/settings", methods=["POST"])
+def api_set_settings():
+    body = request.get_json(silent=True) or {}
+    runtime.set_keys(
+        deepseek_api_key=body.get("deepseek_api_key"),
+        windy_api_key=body.get("windy_api_key"),
+    )
+    return jsonify({"ok": True, "providers": runtime.status()})
+
+
+@app.route("/api/webcams")
+def api_webcams():
+    return jsonify(webcams.get_webcams())
+
+
+@app.route("/api/satellite")
+def api_satellite():
+    return jsonify(satellite.get_satellite())
 
 
 @app.route("/api/news")
@@ -140,7 +177,7 @@ def api_chat_stream():
 if __name__ == "__main__":
     banner = (
         f"\n  J.A.R.V.I.S. v{__version__}  —  AI core "
-        f"{'ONLINE' if config.ai_online() else 'OFFLINE (set DEEPSEEK_API_KEY)'}\n"
+        f"{'ONLINE' if runtime.ai_online() else 'OFFLINE (paste a key in SETTINGS or set DEEPSEEK_API_KEY)'}\n"
         f"  Terminal:  http://{config.HOST}:{config.PORT}\n"
     )
     print(banner)

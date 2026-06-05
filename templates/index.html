@@ -33,9 +33,16 @@
       <span class="stat">POSTURE <b id="posture" class="pill">····</b></span>
       <span class="stat">SENSORS <b id="sensors">-/-</b></span>
       <span class="stat">v{{ version }}</span>
+      <button id="settings-btn" title="API keys & settings">⚙ SETTINGS</button>
       <button id="install-btn" hidden>⤓ INSTALL</button>
     </div>
   </header>
+
+  <!-- ── TAB BAR ──────────────────────────────────────────────────────── -->
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-view="terminal">▣ TERMINAL</button>
+    <button class="tab" data-view="globe">◉ ORBITAL GLOBE</button>
+  </nav>
 
   <!-- ── NEWS TICKER ──────────────────────────────────────────────────── -->
   <div class="ticker">
@@ -43,8 +50,8 @@
     <div class="ticker-track"><span id="ticker-text">Establishing uplink to global feeds…</span></div>
   </div>
 
-  <!-- ── MAIN GRID ────────────────────────────────────────────────────── -->
-  <main class="grid">
+  <!-- ══ VIEW: TERMINAL ═══════════════════════════════════════════════════ -->
+  <main class="grid view active" id="view-terminal">
 
     <!-- LEFT: WORLD WIRE -->
     <section class="panel" id="panel-news">
@@ -91,6 +98,69 @@
     </section>
   </main>
 
+  <!-- ══ VIEW: ORBITAL GLOBE ══════════════════════════════════════════════ -->
+  <section class="view globe-view" id="view-globe">
+    <div class="globe-wrap">
+      <canvas id="globe"></canvas>
+      <div class="globe-hud">
+        <div class="globe-hud-title">◉ ORBITAL INTELLIGENCE</div>
+        <div class="globe-coords" id="globe-coords">initialising…</div>
+      </div>
+      <div class="globe-layers" id="globe-layers">
+        <label><input type="checkbox" data-layer="seismic" checked><span class="lc-seismic">SEISMIC</span></label>
+        <label><input type="checkbox" data-layer="orbital" checked><span class="lc-orbital">ORBITAL</span></label>
+        <label><input type="checkbox" data-layer="satellite" checked><span class="lc-sat">SAT EVENTS</span></label>
+        <label><input type="checkbox" data-layer="webcam" checked><span class="lc-webcam">WEBCAMS</span></label>
+        <label><input type="checkbox" data-layer="news" checked><span class="lc-news">NEWS</span></label>
+      </div>
+      <div class="globe-hint">drag to rotate · scroll / pinch to zoom · tap a marker for intel</div>
+    </div>
+
+    <aside class="globe-rail">
+      <div class="panel-head"><span>◈ INTEL DETAIL</span></div>
+      <div class="rail-box" id="globe-detail">Select a marker on the globe to inspect it.</div>
+
+      <div class="panel-head"><span>🛰 LIVE SATELLITE</span><span class="panel-meta" id="sat-meta">--</span></div>
+      <div class="rail-box" id="sat-box"><div class="loading">linking NASA feeds…</div></div>
+
+      <div class="panel-head"><span>◉ PUBLIC WEBCAMS</span><span class="panel-meta" id="webcam-meta">--</span></div>
+      <div class="rail-box" id="webcam-viewer" hidden></div>
+      <div class="rail-box rail-list" id="webcam-list"><div class="loading">loading directory…</div></div>
+    </aside>
+  </section>
+
+  <!-- ══ SETTINGS MODAL ═══════════════════════════════════════════════════ -->
+  <div class="modal" id="settings-modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <span>⚙ SETTINGS — API KEYS</span>
+        <button id="settings-close" title="close">✕</button>
+      </div>
+      <div class="modal-body">
+        <label class="field-label">DeepSeek API key <span class="key-state" id="ds-state"></span></label>
+        <input id="ds-key" class="key-input" type="password" autocomplete="off"
+               placeholder="sk-…  (powers the J.A.R.V.I.S. AI core)" />
+
+        <label class="field-label">Windy Webcams API key <span class="key-state" id="wd-state"></span></label>
+        <input id="wd-key" class="key-input" type="password" autocomplete="off"
+               placeholder="optional — unlocks live public webcams worldwide" />
+
+        <div class="modal-actions">
+          <button id="settings-save" class="btn-primary">SAVE KEYS</button>
+          <button id="settings-clear" class="btn-ghost">CLEAR</button>
+          <span id="settings-msg"></span>
+        </div>
+        <p class="modal-note">
+          Keys are stored on the server you're connected to
+          (<code>.jarvis_secrets.json</code>, gitignored, chmod 600) and used only
+          to call the respective APIs. Intended for self-hosted / local use — they
+          are never sent back to the browser. Get keys at
+          <code>platform.deepseek.com</code> and <code>api.windy.com</code>.
+        </p>
+      </div>
+    </div>
+  </div>
+
   <!-- ── FUNCTION BAR ─────────────────────────────────────────────────── -->
   <footer class="fnbar" id="fnbar">
     <button data-cmd="HELP"><b>F1</b> HELP</button>
@@ -103,6 +173,7 @@
     <span class="fnbar-net" id="net-indicator">● LIVE</span>
   </footer>
 
+  <script src="{{ url_for('static', filename='js/globe.js') }}"></script>
   <script src="{{ url_for('static', filename='js/terminal.js') }}"></script>
   <script>
     // Register the service worker at root scope so the whole terminal is

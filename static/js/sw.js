@@ -7,7 +7,7 @@
      • API calls (/api/*)             → network-first, fall back to last
                                          cached response when offline.
    ═══════════════════════════════════════════════════════════════════════ */
-const VERSION = "jarvis-v1";
+const VERSION = "jarvis-v2";
 const SHELL = `${VERSION}-shell`;
 const DATA = `${VERSION}-data`;
 
@@ -15,6 +15,7 @@ const SHELL_ASSETS = [
   "/",
   "/static/css/terminal.css",
   "/static/js/terminal.js",
+  "/static/js/globe.js",
   "/static/manifest.webmanifest",
   "/static/icons/icon-192.png",
   "/static/icons/icon-512.png",

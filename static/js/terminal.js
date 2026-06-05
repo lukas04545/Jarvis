@@ -295,17 +295,199 @@
     if (btn) handleInput(btn.dataset.cmd);
   });
 
-  // Function keys F1–F6
+  // Function keys F1–F6 (ignore while typing in a field)
   const FN = { F1: "HELP", F2: "NEWS", F3: "SURV", F4: "BRIEF", F5: "REFRESH", F6: "CLEAR" };
   document.addEventListener("keydown", (e) => {
-    if (FN[e.key]) { e.preventDefault(); handleInput(FN[e.key]); }
+    if (FN[e.key] && e.target.tagName !== "INPUT") { e.preventDefault(); handleInput(FN[e.key]); }
   });
+
+  // ── tabs (TERMINAL / GLOBE) ───────────────────────────────────────────
+  let globeReady = false;
+  function showView(name) {
+    document.querySelectorAll(".view").forEach((v) =>
+      v.classList.toggle("active", v.id === "view-" + name));
+    document.querySelectorAll(".tab").forEach((t) =>
+      t.classList.toggle("active", t.dataset.view === name));
+    if (name === "globe") {
+      if (!globeReady) {
+        JarvisGlobe.init("globe", onGlobeSelect);
+        globeReady = true;
+        loadSatellite();
+        loadWebcams();
+      }
+      JarvisGlobe.show();
+    } else {
+      JarvisGlobe.hide();
+    }
+  }
+  $("tabs").addEventListener("click", (e) => {
+    const t = e.target.closest(".tab");
+    if (t) showView(t.dataset.view);
+  });
+
+  $("globe-layers").addEventListener("change", (e) => {
+    const cb = e.target.closest("input[data-layer]");
+    if (cb) JarvisGlobe.setLayer(cb.dataset.layer, cb.checked);
+  });
+
+  // ── globe marker selection → intel detail / webcam viewer ─────────────
+  function onGlobeSelect(marker, webcam) {
+    const detail = $("globe-detail");
+    const d = marker.data || {};
+    if (marker.type === "webcam") {
+      openWebcam(webcam || d);
+      detail.innerHTML =
+        `<b class="t-TECH">◉ WEBCAM</b><br>${esc(d.title || "")}<br>` +
+        `<span class="news-src">${esc(d.city || "")} ${esc(d.country || "")}</span>`;
+      return;
+    }
+    const rows = {
+      seismic: `<b class="m-${esc(d.level)}">SEISMIC · M${esc(d.mag)}</b><br>${esc(d.place || "")}` +
+               `<br><span class="news-src">${esc(d.time || "")} · depth ${esc(d.depth)}km · ${esc(d.level)}</span>`,
+      orbital: `<b class="t-POLITICS">ORBITAL · ISS</b><br>alt ${esc(d.alt_km)}km · ${esc(d.velocity_kmh)} km/h` +
+               `<br><span class="news-src">lat ${esc(d.lat)}, lon ${esc(d.lon)} · ${esc(d.visibility || "")}</span>`,
+      satellite: `<b style="color:#ff5a1b">SAT EVENT · ${esc(d.tag)}</b><br>${esc(d.title || "")}` +
+                 `<br><span class="news-src">${esc(d.category || "")} · NASA EONET</span>` +
+                 (d.link ? `<br><a class="news-item" style="padding:0" href="${esc(d.link)}" target="_blank" rel="noopener">source ↗</a>` : ""),
+      news: `<b class="t-DISASTER">NEWS CLUSTER</b><br>${esc(d.region)} — ${esc(d.count)} items` +
+            `<br><span class="news-src">switch to TERMINAL for the wire</span>`,
+    };
+    detail.innerHTML = rows[marker.type] || esc(marker.label || "");
+  }
+
+  // ── live satellite rail ───────────────────────────────────────────────
+  async function loadSatellite() {
+    const box = $("sat-box");
+    try {
+      const s = await getJSON("/api/satellite");
+      const ev = s.events || {};
+      const img = s.earth_image || {};
+      const cat = s.catalog || {};
+      $("sat-meta").textContent =
+        (s.simulated ? "SIM · " : "") + `${s.sources_online}/3 online`;
+      const events = (ev.events || []).slice(0, 8).map((e) =>
+        `<div class="sat-row"><span class="sat-tag">${esc(e.tag)}</span>` +
+        `<span class="sat-title">${esc(e.title)}</span></div>`).join("");
+      const earth = img.image
+        ? `<img class="epic-img" src="${esc(img.image)}" alt="EPIC Earth" loading="lazy" />
+           <div class="news-src">DSCOVR/EPIC · ${esc((img.date || "").slice(0, 16))}</div>`
+        : `<div class="news-src">${esc(img.caption || "EPIC image unavailable")}</div>`;
+      box.innerHTML =
+        `<div class="kv"><span>ACTIVE SATELLITES</span><b>${esc(cat.active_satellites ?? "--")}</b></div>` +
+        `<div class="kv"><span>EONET EVENTS</span><b>${esc(ev.count ?? 0)}</b></div>` +
+        `<div class="sat-events">${events || '<div class="news-src">no open events</div>'}</div>` +
+        `<div class="epic-wrap">${earth}</div>`;
+    } catch (e) {
+      box.innerHTML = `<div class="err">satellite link failed: ${esc(e.message)}</div>`;
+    }
+  }
+
+  // ── public webcams (directory + viewer) ───────────────────────────────
+  function openWebcam(cam) {
+    const v = $("webcam-viewer");
+    v.hidden = false;
+    if (cam.embed) {
+      v.innerHTML =
+        `<div class="wc-head">◉ ${esc(cam.title)} <button class="wc-close">✕</button></div>` +
+        `<iframe class="wc-frame" src="${esc(cam.embed)}" allow="fullscreen" referrerpolicy="no-referrer"></iframe>`;
+    } else if (cam.image) {
+      v.innerHTML =
+        `<div class="wc-head">◉ ${esc(cam.title)} <button class="wc-close">✕</button></div>` +
+        `<img class="wc-frame" src="${esc(cam.image)}" alt="${esc(cam.title)}" />`;
+    } else {
+      v.innerHTML =
+        `<div class="wc-head">◉ ${esc(cam.title)} <button class="wc-close">✕</button></div>` +
+        `<div class="wc-link">This is a publicly-published webcam. Open the live source:<br>` +
+        `<a href="${esc(cam.link || "#")}" target="_blank" rel="noopener">${esc(cam.link || "source")} ↗</a></div>`;
+    }
+    v.querySelector(".wc-close").addEventListener("click", () => { v.hidden = true; v.innerHTML = ""; });
+  }
+
+  let webcamList = [];
+  async function loadWebcams() {
+    const list = $("webcam-list");
+    try {
+      const w = await getJSON("/api/webcams");
+      webcamList = w.webcams || [];
+      $("webcam-meta").textContent =
+        (w.live ? "LIVE" : "SAMPLE") + ` · ${w.count}`;
+      const note = w.note ? `<div class="wc-note">${esc(w.note)}</div>` : "";
+      list.innerHTML = note + webcamList.map((c, i) =>
+        `<div class="wc-item" data-i="${i}">` +
+        `<span class="wc-dot">◉</span>` +
+        `<span class="wc-name">${esc(c.title)}</span>` +
+        `<span class="news-src">${esc(c.country || "")}</span></div>`).join("");
+    } catch (e) {
+      list.innerHTML = `<div class="err">webcam directory failed: ${esc(e.message)}</div>`;
+    }
+  }
+  $("webcam-list").addEventListener("click", (e) => {
+    const it = e.target.closest(".wc-item");
+    if (!it) return;
+    const cam = webcamList[+it.dataset.i];
+    if (cam) { openWebcam(cam); JarvisGlobe.select("w-" + cam.id); }
+  });
+
+  // ── settings modal (paste API keys) ───────────────────────────────────
+  const modal = $("settings-modal");
+  function stateLabel(p) {
+    if (!p) return "";
+    if (p.configured) return p.source === "ui" ? "● set (this session)" : "● set (env)";
+    return "○ not set";
+  }
+  async function openSettings() {
+    try {
+      const s = await getJSON("/api/settings");
+      $("ds-state").textContent = stateLabel(s.deepseek);
+      $("ds-state").className = "key-state " + (s.deepseek.configured ? "ok" : "off");
+      $("wd-state").textContent = stateLabel(s.windy);
+      $("wd-state").className = "key-state " + (s.windy.configured ? "ok" : "off");
+    } catch (e) { /* ignore */ }
+    $("ds-key").value = "";
+    $("wd-key").value = "";
+    $("settings-msg").textContent = "";
+    modal.hidden = false;
+  }
+  function closeSettings() { modal.hidden = true; }
+  async function saveSettings(clear) {
+    const payload = clear
+      ? { deepseek_api_key: "", windy_api_key: "" }
+      : { deepseek_api_key: $("ds-key").value, windy_api_key: $("wd-key").value };
+    // Only send fields the operator actually touched (empty string clears).
+    const body = {};
+    if (clear || $("ds-key").value) body.deepseek_api_key = payload.deepseek_api_key;
+    if (clear || $("wd-key").value) body.windy_api_key = payload.windy_api_key;
+    $("settings-msg").textContent = "saving…";
+    try {
+      await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(clear ? payload : body),
+      });
+      $("settings-msg").textContent = clear ? "cleared." : "saved.";
+      loadStatus();                       // flip AI CORE pill
+      if (globeReady) { loadWebcams(); JarvisGlobe.reload(); }
+      setTimeout(openSettings, 300);      // refresh the state labels
+    } catch (e) {
+      $("settings-msg").textContent = "save failed";
+    }
+  }
+  $("settings-btn").addEventListener("click", openSettings);
+  $("settings-close").addEventListener("click", closeSettings);
+  $("settings-save").addEventListener("click", () => saveSettings(false));
+  $("settings-clear").addEventListener("click", () => saveSettings(true));
+  modal.addEventListener("click", (e) => { if (e.target === modal) closeSettings(); });
 
   // ── boot ─────────────────────────────────────────────────────────────
   function refreshAll() {
     loadStatus();
     loadNews();
     loadSurv();
+    if (globeReady) {
+      loadSatellite();
+      loadWebcams();
+      JarvisGlobe.reload();
+    }
   }
 
   bootConsole();

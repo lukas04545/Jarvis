@@ -23,6 +23,10 @@
 | **Global surveillance** | Live OSINT sensor grid — **USGS** seismic activity, **ISS** orbital position, **NOAA** space-weather alerts — rolled into a single threat *posture* (NOMINAL → CRITICAL). |
 | **AI situational briefing** | `BRIEF` / F4 packs the live wire + sensor picture into DeepSeek and returns a BLUF-style intelligence briefing. |
 | **Interactive terminal** | Command line (`HELP`, `NEWS`, `SURV`, `BRIEF`, `REFRESH`, `CLEAR`, or free-text chat), function keys F1–F6, topic filters, scrolling ticker, CRT styling. |
+| **◉ Orbital Globe** | A second tab renders an interactive 3D globe (zero dependencies — canvas orthographic projection). Drag to rotate, scroll/pinch to zoom, and tap any marker for intel. All live layers plot on it: seismic, ISS, satellite events, public webcams, news clusters. |
+| **🛰 Live satellite data** | Keyless open feeds: **NASA EONET** satellite-detected natural events (wildfires, volcanoes, storms…), **NASA EPIC/DSCOVR** full-disc Earth imagery, and the **CelesTrak** active-satellite catalog count. |
+| **◉ Public webcams** | Directory of *intentionally public* webcams (Windy Webcams registry + curated list), plotted on the globe and viewable in-terminal. See [Ethics & scope](#ethics--scope). |
+| **⚙ Paste-your-key settings** | A Settings panel to paste your DeepSeek key (and optional Windy key) at runtime — no file editing. Stored server-side, gitignored, never returned to the browser; the AI core flips ONLINE instantly. |
 
 ## Quick start
 
@@ -118,14 +122,18 @@ app.py                  Flask routes (UI + JSON/SSE API)
 config.py               env-driven configuration
 jarvis/
   deepseek.py           DeepSeek client (blocking + streaming) + JARVIS persona
+  runtime.py            runtime-mutable API keys (pasted in Settings)
   news.py               RSS aggregation, dedupe, region/topic tagging
   surveillance.py       USGS / ISS / NOAA sensor grid + threat posture
+  satellite.py          live open satellite data (NASA EONET/EPIC, CelesTrak)
+  webcams.py            public webcam directory (Windy + curated)
   briefing.py           AI briefing synthesis from the live picture
   cache.py              thread-safe TTL cache (stale-on-error)
   fallback.py           SIMULATED sample datasets
-templates/index.html    terminal layout (+ PWA meta + SW registration)
+templates/index.html    terminal + globe layout, tabs, settings modal
 static/css/terminal.css Bloomberg-style phosphor UI (+ mobile/PWA responsive)
-static/js/terminal.js   client controller (feeds, console, SSE, commands, install)
+static/js/terminal.js   client controller (feeds, console, tabs, settings, webcams)
+static/js/globe.js      dependency-free 3D orbital intelligence globe
 static/js/sw.js         service worker (offline shell, network-first API)
 static/manifest.webmanifest  PWA manifest (icons, shortcuts)
 static/icons/*.png      generated app icons (any + maskable)
@@ -134,14 +142,37 @@ android/termux-setup.sh on-device backend setup for Android/Termux
 tests/test_jarvis.py    network-free unit + API + PWA tests
 ```
 
+## API
+
+| Method | Route | Returns |
+|---|---|---|
+| `GET` | `/api/status` | system + AI core + provider status |
+| `GET`/`POST` | `/api/settings` | provider status / paste API keys (keys never returned) |
+| `GET` | `/api/news` | aggregated, filterable news stream |
+| `GET` | `/api/surveillance` | seismic + orbital + space-weather picture |
+| `GET` | `/api/satellite` | NASA EONET events + EPIC Earth image + sat catalog |
+| `GET` | `/api/webcams` | public webcam directory (live via Windy key, else curated) |
+| `GET` | `/api/briefing` | AI situational briefing |
+| `POST` | `/api/chat` · `/api/chat/stream` | JARVIS reply (JSON / SSE) |
+
 ## Tests
 
 ```bash
 . .venv/bin/activate && pip install pytest
-python -m pytest -q          # 16 passing, no network required
+python -m pytest -q          # 24 passing, no network required
 ```
 
-## Notes
+## Ethics & scope
 
-All surveillance sources are **public, keyless OSINT** feeds. This is a
-situational-awareness aggregator for open data — not a covert collection tool.
+This is a situational-awareness aggregator for **open, public data** — not a
+covert collection tool.
+
+- All surveillance/satellite sources are **public, keyless** feeds (USGS, NOAA,
+  NASA, CelesTrak).
+- The webcam feature surfaces **only webcams their owners have intentionally
+  published** (the Windy Webcams public registry, plus a curated list of
+  well-known public live streams). It deliberately does **not** scan, probe, or
+  access unsecured/private cameras. Accessing a device its owner has not made
+  public is unauthorised and unlawful; this tool provides no such capability.
+- Pasted API keys are stored server-side only (`.jarvis_secrets.json`, chmod
+  600, gitignored) and are never sent back to the browser.

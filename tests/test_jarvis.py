@@ -10,9 +10,16 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from jarvis import deepseek, news, surveillance  # noqa: E402
+from jarvis import deepseek, news, runtime, surveillance, webcams  # noqa: E402
 from jarvis.cache import TTLCache  # noqa: E402
 import app as app_module  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def isolate_runtime(tmp_path, monkeypatch):
+    """Keep the runtime key store empty + writes confined to a temp file."""
+    monkeypatch.setattr(runtime, "_SECRETS_PATH", str(tmp_path / "secrets.json"))
+    monkeypatch.setattr(runtime, "_overrides", {})
 
 
 @pytest.fixture
@@ -156,3 +163,60 @@ def test_index_links_pwa_assets(client):
     assert b"manifest.webmanifest" in body
     assert b'name="theme-color"' in body
     assert b"/sw.js" in body
+
+
+# ── Settings / runtime API keys ────────────────────────────────────────────
+def test_paste_api_key_brings_ai_core_online(client, monkeypatch):
+    monkeypatch.setattr(runtime.config, "DEEPSEEK_API_KEY", "")
+    assert client.get("/api/status").get_json()["ai_core"] == "OFFLINE"
+
+    r = client.post("/api/settings", json={"deepseek_api_key": "sk-live-key"})
+    assert r.status_code == 200 and r.get_json()["ok"] is True
+    assert client.get("/api/status").get_json()["ai_core"] == "ONLINE"
+
+    # Clearing the key takes the core back offline.
+    client.post("/api/settings", json={"deepseek_api_key": ""})
+    assert client.get("/api/status").get_json()["ai_core"] == "OFFLINE"
+
+
+def test_settings_never_leak_key_material(client):
+    client.post("/api/settings", json={"deepseek_api_key": "sk-secret", "windy_api_key": "w-secret"})
+    blob = client.get("/api/settings").get_data(as_text=True)
+    assert "sk-secret" not in blob and "w-secret" not in blob
+    providers = client.get("/api/settings").get_json()
+    assert providers["deepseek"]["configured"] is True
+    assert providers["deepseek"]["source"] == "ui"
+
+
+# ── Public webcams ─────────────────────────────────────────────────────────
+def test_webcams_curated_without_key(client):
+    data = client.get("/api/webcams").get_json()
+    assert data["source"] == "curated" and data["live"] is False
+    assert data["count"] == len(webcams.CURATED)
+    # Every entry is geolocatable (needed to plot on the globe).
+    assert all(c["lat"] is not None and c["lon"] is not None for c in data["webcams"])
+
+
+# ── Live satellite data ────────────────────────────────────────────────────
+def test_satellite_endpoint(client, monkeypatch):
+    sample = {
+        "simulated": False, "sources_online": 3,
+        "events": {"status": "ONLINE", "count": 1,
+                   "events": [{"id": "x", "title": "Wildfire", "category": "Wildfires",
+                               "tag": "FIRE", "lat": 1.0, "lon": 2.0, "date": "", "link": ""}]},
+        "earth_image": {"status": "ONLINE", "image": "http://x/img.png"},
+        "catalog": {"status": "ONLINE", "active_satellites": 9000},
+        "age": 0,
+    }
+    monkeypatch.setattr(app_module.satellite, "get_satellite", lambda: sample)
+    d = client.get("/api/satellite").get_json()
+    assert d["catalog"]["active_satellites"] == 9000
+    assert d["events"]["events"][0]["tag"] == "FIRE"
+
+
+def test_satellite_fallback_is_flagged_simulated():
+    from jarvis import fallback
+    sat = fallback.satellite()
+    assert sat["simulated"] is True
+    assert sat["events"]["count"] >= 1
+    assert all(e["lat"] is not None for e in sat["events"]["events"])

@@ -62,15 +62,15 @@ def news() -> Dict:
 
 def surveillance() -> Dict:
     quakes = [
-        ("M5.8 offshore Honshu, Japan", 5.8, "ELEVATED", 12),
-        ("M4.9 near Antofagasta, Chile", 4.9, "NOMINAL", 34),
-        ("M4.3 Aegean Sea region", 4.3, "NOMINAL", 58),
+        ("M5.8 offshore Honshu, Japan", 5.8, "ELEVATED", 12, 38.3, 142.4),
+        ("M4.9 near Antofagasta, Chile", 4.9, "NOMINAL", 34, -23.65, -70.4),
+        ("M4.3 Aegean Sea region", 4.3, "NOMINAL", 58, 38.5, 25.0),
     ]
     events = []
-    for place, mag, level, mins in quakes:
+    for place, mag, level, mins, lat, lon in quakes:
         t = _t(mins)
         events.append(
-            {"mag": mag, "place": place, "lat": 0, "lon": 0, "depth": 10,
+            {"mag": mag, "place": place, "lat": lat, "lon": lon, "depth": 10,
              "level": level, "ts": t["ts"], "time": t["time"], "url": ""}
         )
     return {
@@ -84,5 +84,30 @@ def surveillance() -> Dict:
                     "alt_km": 421.3, "velocity_kmh": 27600, "visibility": "daylight"},
         "solar": {"status": "SIMULATED", "count": 1,
                   "alerts": [{"issued": "", "summary": "G1 (Minor) geomagnetic storm watch — simulated sample."}]},
+        "generated": datetime.now(tz=timezone.utc).isoformat(),
+    }
+
+
+def satellite() -> Dict:
+    samples = [
+        ("Wildfire complex — California", "Wildfires", "FIRE", 38.6, -121.9),
+        ("Eruptive activity — Mt Etna", "Volcanoes", "VOLCANO", 37.75, 14.99),
+        ("Tropical storm — W Pacific", "Severe Storms", "STORM", 14.2, 138.6),
+        ("Iceberg drift — Weddell Sea", "Icebergs", "ICEBERG", -73.0, -45.0),
+        ("Seasonal flooding — Bangladesh", "Floods", "FLOOD", 24.0, 90.4),
+    ]
+    events = [
+        {"id": f"sim-{i}", "title": t, "category": c, "tag": g,
+         "lat": lat, "lon": lon, "date": "", "link": ""}
+        for i, (t, c, g, lat, lon) in enumerate(samples)
+    ]
+    return {
+        "simulated": True,
+        "sources_online": 0,
+        "events": {"status": "SIMULATED", "count": len(events), "events": events},
+        "earth_image": {"status": "SIMULATED", "image": None,
+                        "caption": "EPIC full-disc image unavailable on this network.",
+                        "date": "", "centroid": {"lat": 0, "lon": 0}},
+        "catalog": {"status": "SIMULATED", "active_satellites": 11000},
         "generated": datetime.now(tz=timezone.utc).isoformat(),
     }

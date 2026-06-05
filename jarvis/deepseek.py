@@ -19,6 +19,7 @@ from typing import Dict, Iterator, List
 import requests
 
 from config import config
+from jarvis import runtime
 
 # JARVIS persona — terse, analytical, situational-awareness oriented.
 SYSTEM_PROMPT = (
@@ -38,7 +39,7 @@ class DeepSeekError(RuntimeError):
 
 def _headers() -> Dict[str, str]:
     return {
-        "Authorization": f"Bearer {config.DEEPSEEK_API_KEY}",
+        "Authorization": f"Bearer {runtime.deepseek_key()}",
         "Content-Type": "application/json",
     }
 
@@ -50,8 +51,8 @@ def _offline_reply(messages: List[Dict[str, str]]) -> str:
     )
     return (
         "[OFFLINE MODE] DeepSeek credentials are not configured, Operator. "
-        "Set DEEPSEEK_API_KEY to bring the AI core online. "
-        f'Your last transmission was logged: "{last[:160]}".'
+        "Paste a DeepSeek API key in SETTINGS (or set DEEPSEEK_API_KEY) to bring "
+        f'the AI core online. Your last transmission was logged: "{last[:160]}".'
     )
 
 
@@ -62,7 +63,7 @@ def complete(
     max_tokens: int = 900,
 ) -> str:
     """Return the full assistant reply for ``messages``."""
-    if not config.ai_online():
+    if not runtime.ai_online():
         return _offline_reply(messages)
 
     payload = {
@@ -96,7 +97,7 @@ def stream(
     max_tokens: int = 900,
 ) -> Iterator[str]:
     """Yield assistant text deltas as they arrive (SSE streaming)."""
-    if not config.ai_online():
+    if not runtime.ai_online():
         # Emit the offline notice in word-sized chunks so the UI still animates.
         for word in _offline_reply(messages).split(" "):
             yield word + " "
