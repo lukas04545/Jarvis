@@ -10,9 +10,23 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from jarvis import deepseek, news, runtime, surveillance, webcams  # noqa: E402
+from jarvis import (  # noqa: E402
+    deepseek, fallback, forecast, news, runtime, signals, surveillance, webcams,
+)
 from jarvis.cache import TTLCache  # noqa: E402
 import app as app_module  # noqa: E402
+
+
+@pytest.fixture
+def offline_data(monkeypatch):
+    """Point every network-backed getter at its SIMULATED fallback."""
+    monkeypatch.setattr(news, "get_news", fallback.news)
+    monkeypatch.setattr(surveillance, "get_surveillance", fallback.surveillance)
+    monkeypatch.setattr(signals.satellite, "get_satellite", fallback.satellite)
+    monkeypatch.setattr(signals.markets, "get_markets", fallback.markets)
+    monkeypatch.setattr(signals.gdelt, "get_gdelt", fallback.gdelt)
+    monkeypatch.setattr(signals.news, "get_news", fallback.news)
+    monkeypatch.setattr(signals.surveillance, "get_surveillance", fallback.surveillance)
 
 
 @pytest.fixture(autouse=True)
@@ -215,8 +229,80 @@ def test_satellite_endpoint(client, monkeypatch):
 
 
 def test_satellite_fallback_is_flagged_simulated():
-    from jarvis import fallback
     sat = fallback.satellite()
     assert sat["simulated"] is True
     assert sat["events"]["count"] >= 1
     assert all(e["lat"] is not None for e in sat["events"]["events"])
+
+
+# ── Data expansion (markets / gdelt fallbacks) ─────────────────────────────
+def test_markets_fallback_has_instruments_and_sentiment():
+    mk = fallback.markets()
+    assert mk["simulated"] is True and len(mk["instruments"]) >= 5
+    assert mk["sentiment"] in ("RISK-OFF", "RISK-ON", "NEUTRAL")
+
+
+def test_gdelt_fallback_themes():
+    gd = fallback.gdelt()
+    assert "conflict" in gd["themes"] and "tone" in gd["themes"]["conflict"]
+
+
+# ── Signals layer ──────────────────────────────────────────────────────────
+def test_build_signals_aggregates_and_flags_anomalies(offline_data):
+    sig = signals.build_signals()
+    assert sig["simulated"] is True
+    assert set(["CONFLICT", "MARKETS"]).issubset(sig["domains"].keys())
+    assert isinstance(sig["anomalies"], list) and sig["anomalies"]
+    assert "sentiment" in sig["markets"]
+
+
+# ── ORACLE forecast engine ─────────────────────────────────────────────────
+def test_heuristic_forecast_scales_with_momentum():
+    sig = {
+        "regions": {"MENA": 12}, "samples_in_baseline": 20,
+        "gdelt": {"conflict": {"tone": -7, "trend_pct": 40}},
+        "markets": {"risk_index": -2.0, "sentiment": "RISK-OFF"},
+        "domains": {
+            "CONFLICT": {"volume": 14, "baseline": 4, "momentum": 2.6, "level": "SURGING"},
+            "MARKETS": {"volume": 9, "baseline": 5, "momentum": 1.4, "level": "RISING"},
+        },
+    }
+    preds = forecast.heuristic_forecast(sig)
+    assert preds, "expected predictions for high-momentum signals"
+    conflict = next(p for p in preds if p["domain"] == "CONFLICT")
+    assert 0.05 <= conflict["probability"] <= 0.95
+    assert conflict["confidence"] in ("LOW", "MEDIUM", "HIGH")
+    assert conflict["horizon"] in ("24h", "7d", "30d")
+    assert conflict["confirm"] and conflict["deny"]
+
+
+def test_forecast_json_parser_handles_code_fences():
+    raw = '```json\n[{"statement":"x","probability":0.6}]\n```'
+    out = forecast._parse_json_array(raw)
+    assert out[0]["statement"] == "x"
+
+
+def test_forecast_normalise_clamps_and_scales_probability():
+    p = forecast._normalise({"statement": "Y", "probability": 140, "domain": "cyber"})
+    assert p["probability"] <= 0.95 and p["domain"] == "CYBER" and p["source"] == "ai"
+
+
+def test_generate_forecast_falls_back_to_heuristic_offline(offline_data, monkeypatch):
+    # No AI key → ai_forecast raises/returns offline → heuristic path.
+    monkeypatch.setattr(forecast.deepseek.config, "DEEPSEEK_API_KEY", "")
+    fc = forecast.generate_forecast()
+    assert fc["method"] in ("heuristic", "ai+heuristic")
+    assert "predictions" in fc and "signals" in fc
+    assert all(0.05 <= p["probability"] <= 0.95 for p in fc["predictions"])
+
+
+def test_forecast_endpoint(client, monkeypatch):
+    monkeypatch.setattr(
+        app_module.forecast, "generate_forecast",
+        lambda: {"method": "heuristic", "predictions": [
+            {"statement": "T", "domain": "CONFLICT", "region": "MENA",
+             "probability": 0.6, "confidence": "MEDIUM", "horizon": "7d",
+             "drivers": [], "confirm": "", "deny": "", "source": "heuristic"}],
+            "signals": {}, "simulated": True})
+    d = client.get("/api/forecast").get_json()
+    assert d["predictions"][0]["domain"] == "CONFLICT"

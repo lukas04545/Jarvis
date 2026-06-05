@@ -42,6 +42,7 @@
   <nav class="tabs" id="tabs">
     <button class="tab active" data-view="terminal">▣ TERMINAL</button>
     <button class="tab" data-view="globe">◉ ORBITAL GLOBE</button>
+    <button class="tab" data-view="forecast">⊹ ORACLE · FORECAST</button>
   </nav>
 
   <!-- ── NEWS TICKER ──────────────────────────────────────────────────── -->
@@ -126,6 +127,34 @@
       <div class="panel-head"><span>◉ PUBLIC WEBCAMS</span><span class="panel-meta" id="webcam-meta">--</span></div>
       <div class="rail-box" id="webcam-viewer" hidden></div>
       <div class="rail-box rail-list" id="webcam-list"><div class="loading">loading directory…</div></div>
+    </aside>
+  </section>
+
+  <!-- ══ VIEW: ORACLE FORECAST ════════════════════════════════════════════ -->
+  <section class="view forecast-view" id="view-forecast">
+    <div class="forecast-main">
+      <div class="forecast-head">
+        <div>
+          <div class="forecast-title">⊹ J.A.R.V.I.S. ORACLE</div>
+          <div class="forecast-sub" id="forecast-meta">predictive engine · idle</div>
+        </div>
+        <button id="forecast-run" class="btn-primary">⟳ GENERATE FORECAST</button>
+      </div>
+      <div class="forecast-banner" id="forecast-banner"></div>
+      <div class="predictions" id="predictions">
+        <div class="loading">Press GENERATE FORECAST to run the ORACLE over live signals.</div>
+      </div>
+    </div>
+
+    <aside class="forecast-rail">
+      <div class="panel-head"><span>◈ SIGNAL VECTOR</span><span class="panel-meta" id="signals-meta">--</span></div>
+      <div class="rail-box" id="signal-domains"><div class="loading">computing…</div></div>
+      <div class="panel-head"><span>⚠ ANOMALIES</span></div>
+      <div class="rail-box" id="signal-anomalies"></div>
+      <div class="panel-head"><span>$ MARKETS</span><span class="panel-meta" id="markets-meta">--</span></div>
+      <div class="rail-box" id="signal-markets"></div>
+      <div class="panel-head"><span>📡 GDELT TONE/VOLUME</span></div>
+      <div class="rail-box" id="signal-gdelt"></div>
     </aside>
   </section>
 

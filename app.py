@@ -22,9 +22,13 @@ from jarvis import (
     __version__,
     briefing,
     deepseek,
+    forecast,
+    gdelt,
+    markets,
     news,
     runtime,
     satellite,
+    signals,
     surveillance,
     webcams,
 )
@@ -86,6 +90,27 @@ def api_webcams():
 @app.route("/api/satellite")
 def api_satellite():
     return jsonify(satellite.get_satellite())
+
+
+@app.route("/api/markets")
+def api_markets():
+    return jsonify(markets.get_markets())
+
+
+@app.route("/api/gdelt")
+def api_gdelt():
+    return jsonify(gdelt.get_gdelt())
+
+
+@app.route("/api/signals")
+def api_signals():
+    return jsonify(signals.build_signals())
+
+
+@app.route("/api/forecast")
+def api_forecast():
+    # The ORACLE: quantitative signals + heuristic + DeepSeek predictions.
+    return jsonify(forecast.generate_forecast())
 
 
 @app.route("/api/news")

@@ -88,6 +88,37 @@ def surveillance() -> Dict:
     }
 
 
+def markets() -> Dict:
+    instruments = [
+        {"symbol": "S&P 500", "name": "S&P 500", "class": "index", "price": 5430.2, "chg": -0.8},
+        {"symbol": "Nasdaq", "name": "Nasdaq", "class": "index", "price": 17220.5, "chg": -1.1},
+        {"symbol": "Nikkei 225", "name": "Nikkei 225", "class": "index", "price": 38900.0, "chg": 0.4},
+        {"symbol": "Crude Oil", "name": "Crude Oil", "class": "commodity", "price": 82.4, "chg": 2.3},
+        {"symbol": "Gold", "name": "Gold", "class": "commodity", "price": 2380.0, "chg": 0.9},
+        {"symbol": "BTC", "name": "BTC", "class": "crypto", "price": 64200.0, "chg": -2.6},
+        {"symbol": "ETH", "name": "ETH", "class": "crypto", "price": 3380.0, "chg": -3.1},
+    ]
+    risk = [i["chg"] for i in instruments if i["class"] in ("index", "crypto")]
+    risk_avg = round(sum(risk) / len(risk), 2)
+    return {
+        "simulated": True, "sources_online": 0, "instruments": instruments,
+        "risk_index": risk_avg, "sentiment": "RISK-OFF",
+        "generated": datetime.now(tz=timezone.utc).isoformat(),
+    }
+
+
+def gdelt() -> Dict:
+    return {
+        "simulated": True, "themes_online": 0,
+        "themes": {
+            "conflict": {"latest": 4.1, "mean": 3.2, "trend_pct": 28.1, "points": 56, "tone": -5.4},
+            "economy": {"latest": 2.8, "mean": 2.9, "trend_pct": -3.4, "points": 56, "tone": -1.8},
+            "unrest": {"latest": 1.6, "mean": 1.1, "trend_pct": 45.5, "points": 56, "tone": -3.9},
+        },
+        "generated": datetime.now(tz=timezone.utc).isoformat(),
+    }
+
+
 def satellite() -> Dict:
     samples = [
         ("Wildfire complex — California", "Wildfires", "FIRE", 38.6, -121.9),

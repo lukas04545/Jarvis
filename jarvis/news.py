@@ -11,6 +11,7 @@ from __future__ import annotations
 import html
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Dict, List
 
@@ -20,26 +21,61 @@ import requests
 from config import config
 from jarvis.cache import cache
 
-# (label, region, url) — a deliberately diverse, multi-pole source set.
+def _g(query: str) -> str:
+    """Build a Google-News RSS search URL (last 24h, English)."""
+    return ("https://news.google.com/rss/search?q="
+            + query.replace(" ", "+") + "+when:1d&hl=en-US&gl=US&ceid=US:en")
+
+
+# (label, region, url) — a deliberately broad, multi-pole, multi-domain source
+# set. Outlets give breadth; Google-News topic queries give depth on the
+# domains the ORACLE forecasts over (conflict, markets, cyber, space, disease…).
 FEEDS = [
+    # ── International wires / broadcasters ────────────────────────────────
     ("BBC World", "Global", "https://feeds.bbci.co.uk/news/world/rss.xml"),
     ("Al Jazeera", "MENA", "https://www.aljazeera.com/xml/rss/all.xml"),
-    ("Reuters World", "Global", "https://news.google.com/rss/search?q=when:24h+world&hl=en-US&gl=US&ceid=US:en"),
-    ("AP Top", "Americas", "https://news.google.com/rss/search?q=when:24h+source:Associated+Press&hl=en-US&gl=US&ceid=US:en"),
+    ("Guardian World", "Global", "https://www.theguardian.com/world/rss"),
+    ("Reuters World", "Global", _g("world")),
+    ("AP Top", "Americas", _g("source:Associated Press")),
+    ("NPR World", "Americas", "https://feeds.npr.org/1004/rss.xml"),
     ("DW Europe", "Europe", "https://rss.dw.com/rdf/rss-en-eu"),
-    ("NHK World", "Asia", "https://www3.nhk.or.jp/nhkworld/en/news/feeds/rss/all.xml"),
     ("France24", "Europe", "https://www.france24.com/en/rss"),
+    ("Euronews", "Europe", "https://www.euronews.com/rss?level=theme&name=news"),
+    ("NHK World", "Asia", "https://www3.nhk.or.jp/nhkworld/en/news/feeds/rss/all.xml"),
     ("CNA Asia", "Asia", "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml"),
+    ("Times of India", "Asia", "https://timesofindia.indiatimes.com/rssfeedstopstories.cms"),
+    ("AllAfrica", "Africa", "https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf"),
+    # ── Markets / economy ─────────────────────────────────────────────────
+    ("CNBC Markets", "Global", "https://www.cnbc.com/id/100003114/device/rss/rss.html"),
+    ("Economy Wire", "Global", _g("central bank OR inflation OR recession OR markets")),
+    ("Energy/Oil", "Global", _g("oil prices OR OPEC OR energy crisis")),
+    # ── Conflict / security / geopolitics ─────────────────────────────────
+    ("Conflict Wire", "Global", _g("military conflict OR offensive OR ceasefire OR strikes")),
+    ("Sanctions/Diplo", "Global", _g("sanctions OR summit OR diplomatic OR treaty")),
+    ("Cyber Wire", "Global", _g("cyberattack OR data breach OR ransomware")),
+    # ── Science / space / tech / health ───────────────────────────────────
+    ("Ars Technica", "Global", "https://feeds.arstechnica.com/arstechnica/index"),
+    ("The Verge", "Global", "https://www.theverge.com/rss/index.xml"),
+    ("NASA Breaking", "Global", "https://www.nasa.gov/rss/dyn/breaking_news.rss"),
+    ("ScienceDaily", "Global", "https://www.sciencedaily.com/rss/top/science.xml"),
+    ("Outbreak Wire", "Global", _g("outbreak OR epidemic OR virus OR public health emergency")),
 ]
 
-# Lightweight keyword → topic tagging for the terminal's topic filter / heatmap.
+# Lightweight keyword → topic tagging for the terminal's topic filter / heatmap
+# and the ORACLE's per-domain signal volumes.
 TOPIC_KEYWORDS = {
-    "CONFLICT": ["war", "strike", "military", "missile", "troops", "ceasefire", "attack", "clash", "border"],
-    "MARKETS": ["market", "stocks", "economy", "inflation", "rate", "trade", "tariff", "oil", "gdp", "bond"],
-    "POLITICS": ["election", "president", "minister", "parliament", "vote", "summit", "sanction", "diplomat"],
-    "DISASTER": ["earthquake", "flood", "storm", "wildfire", "hurricane", "cyclone", "evacuat", "drought"],
-    "TECH": ["ai", "chip", "cyber", "hack", "satellite", "space", "semiconductor", "data breach"],
-    "HEALTH": ["virus", "outbreak", "disease", "pandemic", "vaccine", "health"],
+    "CONFLICT": ["war", "strike", "military", "missile", "troops", "ceasefire", "attack",
+                 "clash", "border", "offensive", "shelling", "insurgent", "airstrike"],
+    "MARKETS": ["market", "stocks", "economy", "inflation", "rate", "trade", "tariff", "oil",
+                "gdp", "bond", "recession", "central bank", "yields", "currency", "default"],
+    "POLITICS": ["election", "president", "minister", "parliament", "vote", "summit", "sanction",
+                 "diplomat", "coup", "protest", "referendum", "treaty"],
+    "DISASTER": ["earthquake", "flood", "storm", "wildfire", "hurricane", "cyclone", "evacuat",
+                 "drought", "volcano", "tsunami", "landslide"],
+    "CYBER": ["cyberattack", "ransomware", "data breach", "hack", "malware", "ddos", "exploit"],
+    "TECH": ["ai", "chip", "semiconductor", "robot", "quantum", "startup", "software"],
+    "SPACE": ["satellite", "rocket", "launch", "orbit", "nasa", "spacex", "asteroid", "space"],
+    "HEALTH": ["virus", "outbreak", "disease", "pandemic", "vaccine", "epidemic", "health emergency"],
 }
 
 _TAG_RE = re.compile(r"<[^>]+>")
@@ -100,13 +136,19 @@ def _fetch_feed(label: str, region: str, url: str) -> List[Dict]:
 
 
 def _aggregate() -> List[Dict]:
+    # Fetch all feeds concurrently so a couple of slow sources can't bottleneck
+    # the wire — important now that we poll ~24 feeds for maximum coverage.
     items: List[Dict] = []
-    for label, region, url in FEEDS:
-        try:
-            items.extend(_fetch_feed(label, region, url))
-        except Exception:
-            # One dead feed must not blank the whole wire.
-            continue
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        futures = {
+            pool.submit(_fetch_feed, label, region, url): label
+            for label, region, url in FEEDS
+        }
+        for fut in as_completed(futures):
+            try:
+                items.extend(fut.result())
+            except Exception:
+                continue  # one dead feed must not blank the whole wire
 
     # Dedupe on a normalised title prefix (wires often re-run the same story).
     seen: set[str] = set()
@@ -117,7 +159,7 @@ def _aggregate() -> List[Dict]:
             continue
         seen.add(key)
         deduped.append(it)
-    return deduped[:80]
+    return deduped[:150]
 
 
 def get_news() -> Dict:

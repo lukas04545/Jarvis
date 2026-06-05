@@ -307,6 +307,57 @@ body { display: flex; flex-direction: column; }
 .modal-note { color: var(--text-dim); font-size: 10px; line-height: 1.5; margin-top: 14px; }
 .modal-note code { color: var(--cyan); }
 
+/* ── FORECAST / ORACLE VIEW ────────────────────────────────────────────── */
+.forecast-view { gap: 6px; padding: 6px; }
+.forecast-main { flex: 1; min-width: 0; display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--grid-line); overflow: hidden; }
+.forecast-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px; background: linear-gradient(90deg, #160f02, var(--panel-2) 70%);
+  border-bottom: 1px solid var(--amber-dim);
+}
+.forecast-title { color: var(--amber); font-size: 15px; font-weight: 600; letter-spacing: 2px; }
+.forecast-sub { color: var(--text-dim); font-size: 10px; margin-top: 2px; }
+#forecast-run { font-size: 11px; padding: 7px 14px; }
+#forecast-run:disabled { opacity: 0.5; cursor: wait; }
+.forecast-banner { padding: 5px 14px; font-size: 10px; color: var(--text-dim);
+  border-bottom: 1px solid var(--grid-line); background: var(--panel-2); }
+.predictions { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+
+.pred { border: 1px solid var(--grid-line); border-left-width: 3px; padding: 9px 11px; background: var(--panel-2); }
+.pred.high { border-left-color: var(--red); }
+.pred.med  { border-left-color: var(--amber); }
+.pred.low  { border-left-color: var(--text-dim); }
+.pred-top { display: flex; gap: 10px; align-items: center; }
+.pred-prob { font-size: 22px; font-weight: 600; color: var(--text); min-width: 58px; }
+.pred.high .pred-prob { color: var(--red); }
+.pred.med .pred-prob { color: var(--amber); }
+.pred-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pred-domain { font-weight: 600; letter-spacing: 1px; font-size: 11px; }
+.pred-tag { font-size: 9px; color: var(--text-dim); border: 1px solid var(--grid-line); padding: 1px 5px; letter-spacing: 1px; }
+.pred-tag.src-ai { color: var(--cyan); border-color: var(--cyan); }
+.pred-tag.src-heuristic { color: var(--green); border-color: #1f3a2a; }
+.pred-bar { height: 4px; background: #11161f; margin: 7px 0; }
+.pred-fill { height: 100%; }
+.pred-statement { color: var(--text); font-size: 13px; line-height: 1.4; }
+.pred-drivers { margin-top: 6px; font-size: 10.5px; color: var(--text-dim); }
+.pred-drivers b { color: var(--cyan); letter-spacing: 1px; }
+.pred-drivers ul { margin: 2px 0 0 16px; }
+.pred-cd { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; font-size: 10px; }
+.pred-cd .confirm { color: var(--green); }
+.pred-cd .deny { color: var(--red); }
+
+.forecast-rail { width: 320px; flex-shrink: 0; background: var(--panel);
+  border: 1px solid var(--grid-line); display: flex; flex-direction: column; overflow-y: auto; }
+.sig-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
+.sig-name { width: 70px; flex-shrink: 0; font-size: 10px; letter-spacing: 1px; }
+.sig-bar { flex: 1; height: 6px; background: #11161f; }
+.sig-fill { height: 100%; }
+.sig-val { width: 78px; text-align: right; font-size: 9px; color: var(--text-dim); }
+.anom { color: var(--amber); font-size: 10.5px; padding: 2px 0; line-height: 1.35; }
+.mover { display: flex; justify-content: space-between; font-size: 11px; padding: 2px 0; }
+.mover .up { color: var(--green); } .mover .down { color: var(--red); }
+
 /* ── TABLET ────────────────────────────────────────────────────────────── */
 @media (max-width: 1100px) {
   .grid { grid-template-columns: 1fr 1fr; grid-auto-rows: minmax(240px, 40vh); overflow-y: auto; }
@@ -352,6 +403,12 @@ body { display: flex; flex-direction: column; }
   .globe-hint { font-size: 9px; }
   .tab { padding: 8px 14px; }
   .key-input { font-size: 16px; }
+
+  /* Forecast view stacks: predictions on top, signal rail below. */
+  .forecast-view { flex-direction: column; overflow-y: auto; }
+  .forecast-rail { width: auto; }
+  .forecast-main { min-height: 60vh; }
+  .tabs { overflow-x: auto; white-space: nowrap; }
 }
 
 /* Standalone (installed PWA) — reclaim the browser chrome space. */

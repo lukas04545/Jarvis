@@ -190,6 +190,7 @@
     "  NEWS            refresh the World Wire",
     "  SURV            refresh the surveillance grid",
     "  BRIEF           generate an AI situational briefing",
+    "  FORECAST        run the ORACLE — predict future events",
     "  REFRESH         reload all feeds",
     "  CLEAR           clear this console",
     "  <anything else> talk to J.A.R.V.I.S. (DeepSeek)",
@@ -267,6 +268,10 @@
       case "SURV": addLine("sys", "Refreshing surveillance grid…"); return loadSurv();
       case "REFRESH": addLine("sys", "Reloading all feeds…"); refreshAll(); return;
       case "BRIEF": return doBrief();
+      case "FORECAST": case "ORACLE": case "PREDICT":
+        addLine("sys", "Engaging ORACLE — switching to forecast view…");
+        showView("forecast");
+        setTimeout(runForecast, 200); return;
       default: return streamChat(text);
     }
   }
@@ -301,8 +306,9 @@
     if (FN[e.key] && e.target.tagName !== "INPUT") { e.preventDefault(); handleInput(FN[e.key]); }
   });
 
-  // ── tabs (TERMINAL / GLOBE) ───────────────────────────────────────────
+  // ── tabs (TERMINAL / GLOBE / FORECAST) ────────────────────────────────
   let globeReady = false;
+  let forecastReady = false;
   function showView(name) {
     document.querySelectorAll(".view").forEach((v) =>
       v.classList.toggle("active", v.id === "view-" + name));
@@ -318,6 +324,10 @@
       JarvisGlobe.show();
     } else {
       JarvisGlobe.hide();
+    }
+    if (name === "forecast" && !forecastReady) {
+      forecastReady = true;
+      loadSignals();
     }
   }
   $("tabs").addEventListener("click", (e) => {
@@ -427,6 +437,121 @@
     const cam = webcamList[+it.dataset.i];
     if (cam) { openWebcam(cam); JarvisGlobe.select("w-" + cam.id); }
   });
+
+  // ── ORACLE: signals dashboard + forecast ──────────────────────────────
+  const DOMAIN_COLORS = {
+    CONFLICT: "var(--red)", MARKETS: "var(--green)", POLITICS: "var(--cyan)",
+    DISASTER: "var(--amber)", CYBER: "#ff5db1", TECH: "var(--magenta)",
+    SPACE: "#9d7bff", HEALTH: "#7ad6c0",
+  };
+  function momentumPct(z) { return Math.max(4, Math.min(100, 50 + z * 16)); }
+
+  function renderSignals(sig) {
+    $("signals-meta").textContent =
+      (sig.simulated ? "SIM · " : "") + `${sig.samples_in_baseline} baseline samples`;
+
+    // Domain momentum bars
+    const dom = Object.entries(sig.domains || {})
+      .sort((a, b) => (b[1].momentum - a[1].momentum) || (b[1].volume - a[1].volume));
+    $("signal-domains").innerHTML = dom.map(([d, v]) => {
+      const col = DOMAIN_COLORS[d] || "var(--text-dim)";
+      return `<div class="sig-row">
+        <span class="sig-name" style="color:${col}">${esc(d)}</span>
+        <div class="sig-bar"><div class="sig-fill" style="width:${momentumPct(v.momentum)}%;background:${col}"></div></div>
+        <span class="sig-val">${v.volume} · ${v.level}</span></div>`;
+    }).join("") || '<div class="news-src">no signal</div>';
+
+    // Anomalies
+    $("signal-anomalies").innerHTML = (sig.anomalies || []).length
+      ? sig.anomalies.map((a) => `<div class="anom">▲ ${esc(a)}</div>`).join("")
+      : '<div class="news-src">no anomalies detected</div>';
+
+    // Markets
+    const mk = sig.markets || {};
+    $("markets-meta").textContent = mk.sentiment || "--";
+    $("signal-markets").innerHTML =
+      `<div class="kv"><span>SENTIMENT</span><b class="${mk.sentiment === 'RISK-OFF' ? 'm-CRITICAL' : 'm-NOMINAL'}">${esc(mk.sentiment || '--')}</b></div>` +
+      `<div class="kv"><span>RISK INDEX</span><b>${esc(mk.risk_index ?? '--')}</b></div>` +
+      (mk.movers || []).map((m) => {
+        const cls = m.chg >= 0 ? "up" : "down";
+        return `<div class="mover"><span>${esc(m.symbol)}</span>` +
+               `<span class="${cls}">${m.chg >= 0 ? "+" : ""}${esc(m.chg)}%</span></div>`;
+      }).join("");
+
+    // GDELT
+    $("signal-gdelt").innerHTML = Object.entries(sig.gdelt || {}).map(([k, t]) => {
+      if (t.error) return `<div class="news-src">${esc(k)}: offline</div>`;
+      const toneCls = t.tone < -3 ? "down" : (t.tone > 1 ? "up" : "");
+      return `<div class="mover"><span>${esc(k)}</span>` +
+             `<span>vol ${t.trend_pct >= 0 ? "+" : ""}${esc(t.trend_pct)}% · ` +
+             `<b class="${toneCls}">tone ${esc(t.tone)}</b></span></div>`;
+    }).join("") || '<div class="news-src">no data</div>';
+  }
+
+  async function loadSignals() {
+    try {
+      const sig = await getJSON("/api/signals");
+      renderSignals(sig);
+    } catch (e) {
+      $("signal-domains").innerHTML = `<div class="err">signals failed: ${esc(e.message)}</div>`;
+    }
+  }
+
+  function probBucket(p) { return p >= 0.66 ? "high" : (p >= 0.4 ? "med" : "low"); }
+
+  function renderPredictions(fc) {
+    const banner = $("forecast-banner");
+    const method = fc.method === "ai+heuristic"
+      ? "AI (DeepSeek) + heuristic baseline"
+      : "heuristic baseline (paste a DeepSeek key in SETTINGS for AI forecasts)";
+    banner.innerHTML =
+      `<span>${fc.simulated ? "⚠ SIMULATED SIGNALS · " : ""}method: ${esc(method)}</span>` +
+      (fc.ai_error ? `<span class="err"> · AI: ${esc(fc.ai_error)}</span>` : "");
+
+    $("forecast-meta").textContent =
+      `${fc.predictions.length} predictions · ${new Date(fc.generated).toUTCString().slice(17, 25)}Z`;
+
+    $("predictions").innerHTML = fc.predictions.map((p) => {
+      const col = DOMAIN_COLORS[p.domain] || "var(--amber)";
+      const pct = Math.round(p.probability * 100);
+      const drivers = (p.drivers || []).map((d) => `<li>${esc(d)}</li>`).join("");
+      return `<div class="pred ${probBucket(p.probability)}">
+        <div class="pred-top">
+          <span class="pred-prob">${pct}%</span>
+          <div class="pred-meta">
+            <span class="pred-domain" style="color:${col}">${esc(p.domain)}</span>
+            <span class="pred-tag">${esc(p.region)}</span>
+            <span class="pred-tag">⌛ ${esc(p.horizon)}</span>
+            <span class="pred-tag">conf ${esc(p.confidence)}</span>
+            <span class="pred-tag src-${esc(p.source)}">${esc(p.source)}</span>
+          </div>
+        </div>
+        <div class="pred-bar"><div class="pred-fill" style="width:${pct}%;background:${col}"></div></div>
+        <div class="pred-statement">${esc(p.statement)}</div>
+        ${drivers ? `<div class="pred-drivers"><b>drivers</b><ul>${drivers}</ul></div>` : ""}
+        <div class="pred-cd">
+          <span class="confirm">✓ confirm: ${esc(p.confirm || "—")}</span>
+          <span class="deny">✕ refute: ${esc(p.deny || "—")}</span>
+        </div>
+      </div>`;
+    }).join("") || '<div class="news-src">no predictions</div>';
+  }
+
+  async function runForecast() {
+    const btn = $("forecast-run");
+    btn.disabled = true;
+    $("predictions").innerHTML = '<div class="loading">ORACLE computing — fusing signals & querying DeepSeek…</div>';
+    try {
+      const fc = await getJSON("/api/forecast");
+      renderPredictions(fc);
+      renderSignals(fc.signals);   // forecast bundles fresh signals
+    } catch (e) {
+      $("predictions").innerHTML = `<div class="err">forecast failed: ${esc(e.message)}</div>`;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+  $("forecast-run").addEventListener("click", runForecast);
 
   // ── settings modal (paste API keys) ───────────────────────────────────
   const modal = $("settings-modal");

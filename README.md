@@ -27,6 +27,8 @@
 | **🛰 Live satellite data** | Keyless open feeds: **NASA EONET** satellite-detected natural events (wildfires, volcanoes, storms…), **NASA EPIC/DSCOVR** full-disc Earth imagery, and the **CelesTrak** active-satellite catalog count. |
 | **◉ Public webcams** | Directory of *intentionally public* webcams (Windy Webcams registry + curated list), plotted on the globe and viewable in-terminal. See [Ethics & scope](#ethics--scope). |
 | **⚙ Paste-your-key settings** | A Settings panel to paste your DeepSeek key (and optional Windy key) at runtime — no file editing. Stored server-side, gitignored, never returned to the browser; the AI core flips ONLINE instantly. |
+| **⊹ ORACLE — event prediction** | A forecasting engine that fuses every signal into a quantitative vector, then produces **probabilistic predictions of future events** — each with probability, confidence, time horizon, drivers, and confirm/refute indicators. Heuristic baseline + DeepSeek structured forecasts. |
+| **Maximised data ingestion** | ~24 news feeds (wires, finance, conflict, cyber, space, science, health) pulled **concurrently**, plus **markets** (CoinGecko crypto + Stooq indices/commodities/FX) and **GDELT** global media volume & tone. |
 
 ## Quick start
 
@@ -95,17 +97,6 @@ works without HTTPS.
 
 > Get a key at <https://platform.deepseek.com>.
 
-## API
-
-| Method | Route | Returns |
-|---|---|---|
-| `GET` | `/api/status` | system + AI core status |
-| `GET` | `/api/news?topic=&region=` | aggregated, filterable news stream |
-| `GET` | `/api/surveillance` | seismic + orbital + space-weather picture |
-| `GET` | `/api/briefing` | AI situational briefing |
-| `POST` | `/api/chat` | blocking JARVIS reply — `{"message": "..."}` |
-| `POST` | `/api/chat/stream` | SSE token stream of the reply |
-
 ## Resilience
 
 - **Stale-on-error caching** — a dead upstream serves the last good value instead of going dark.
@@ -127,6 +118,10 @@ jarvis/
   surveillance.py       USGS / ISS / NOAA sensor grid + threat posture
   satellite.py          live open satellite data (NASA EONET/EPIC, CelesTrak)
   webcams.py            public webcam directory (Windy + curated)
+  markets.py            crypto (CoinGecko) + indices/commodities (Stooq)
+  gdelt.py              GDELT global media volume + tone signals
+  signals.py            quantitative signal vector + momentum + anomalies
+  forecast.py           ORACLE — heuristic + DeepSeek event predictions
   briefing.py           AI briefing synthesis from the live picture
   cache.py              thread-safe TTL cache (stale-on-error)
   fallback.py           SIMULATED sample datasets
@@ -152,14 +147,39 @@ tests/test_jarvis.py    network-free unit + API + PWA tests
 | `GET` | `/api/surveillance` | seismic + orbital + space-weather picture |
 | `GET` | `/api/satellite` | NASA EONET events + EPIC Earth image + sat catalog |
 | `GET` | `/api/webcams` | public webcam directory (live via Windy key, else curated) |
+| `GET` | `/api/markets` | crypto + indices + commodities + risk gauge |
+| `GET` | `/api/gdelt` | global media coverage volume + tone by theme |
+| `GET` | `/api/signals` | unified quantitative signal vector + anomalies |
+| `GET` | `/api/forecast` | **ORACLE** — probabilistic predictions of future events |
 | `GET` | `/api/briefing` | AI situational briefing |
 | `POST` | `/api/chat` · `/api/chat/stream` | JARVIS reply (JSON / SSE) |
+
+## ⊹ ORACLE — predicting future events
+
+The ORACLE turns the firehose of data into falsifiable forecasts:
+
+1. **Ingest** — ~24 news feeds (concurrent), markets, GDELT, seismic, satellite.
+2. **Signals** (`signals.py`) — distil into a numeric vector: per-domain and
+   per-region coverage **volume** and **momentum** (z-score vs a rolling
+   in-memory baseline that sharpens as the server runs), media **tone**, market
+   **risk**, geophysical posture, satellite tallies — and flag **anomalies**.
+3. **Forecast** (`forecast.py`) —
+   * a transparent **heuristic** layer maps momentum/tone/risk → probabilities
+     (always on, even offline);
+   * **DeepSeek** reasons over the full vector and returns richer predictions as
+     strict JSON; the two are merged and de-duplicated.
+4. **Output** — each prediction carries a `probability`, `confidence`,
+   `horizon` (24h/7d/30d), `drivers`, and `confirm`/`deny` indicators, so it can
+   be tracked and scored — not just asserted.
+
+Run it from the **⊹ ORACLE · FORECAST** tab, or type `FORECAST` in the console.
+Probabilities are model estimates over the stated horizon, not certainties.
 
 ## Tests
 
 ```bash
 . .venv/bin/activate && pip install pytest
-python -m pytest -q          # 24 passing, no network required
+python -m pytest -q          # 32 passing, no network required
 ```
 
 ## Ethics & scope
