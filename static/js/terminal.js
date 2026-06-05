@@ -192,6 +192,9 @@
     "  BRIEF           generate an AI situational briefing",
     "  FORECAST        run the ORACLE — predict future events",
     "  AGENTS <task>   deploy the multi-agent mesh on a tasking",
+    "  RECON <email>   email-exposure OSINT (authorised use only)",
+    "  BRAIN           open the neural memory graph",
+    "  REMEMBER <text> imprint a memory · RECALL <q> recall memories",
     "  DEVICE          local device sensors (memory/screen/voice input)",
     "  REFRESH         reload all feeds",
     "  CLEAR           clear this console",
@@ -277,17 +280,42 @@
       case "DEVICE": case "SENSORS":
         addLine("sys", "Opening local device sensors…");
         showView("device"); return;
-      default:
+      case "BRAIN": case "MEMORY":
+        addLine("sys", "Opening neural memory…");
+        showView("brain"); return;
+      default: {
+        const rest = text.replace(/^\s*\S+\s*/, "").trim();
         // AGENTS <task> / TASKFORCE <task> → deploy the multi-agent mesh.
-        if (cmd === "AGENTS" || cmd === "TASKFORCE" ||
-            cmd.startsWith("AGENTS ") || cmd.startsWith("TASKFORCE ")) {
-          const task = text.replace(/^\s*\S+\s*/, "").trim();
-          addLine("sys", task ? "Deploying agent mesh…" : "Opening agent mesh — enter a tasking.");
+        if (cmd === "AGENTS" || cmd === "TASKFORCE" || cmd.startsWith("AGENTS ") || cmd.startsWith("TASKFORCE ")) {
+          addLine("sys", rest ? "Deploying agent mesh…" : "Opening agent mesh — enter a tasking.");
           showView("agents");
-          if (task) { $("agent-query").value = task; setTimeout(() => runAgents(task), 200); }
+          if (rest) { $("agent-query").value = rest; setTimeout(() => runAgents(rest), 200); }
+          return;
+        }
+        // RECON <email> → email-exposure OSINT.
+        if (cmd === "RECON" || cmd.startsWith("RECON ")) {
+          showView("recon");
+          if (rest) { $("recon-email").value = rest; addLine("sys", "Tick the authorisation box, then SCAN."); }
+          else addLine("sys", "Opening RECON — enter an email you're authorised to check.");
+          return;
+        }
+        // REMEMBER <text> → imprint a memory neuron.
+        if (cmd.startsWith("REMEMBER ") || cmd.startsWith("REMEMBER\t")) {
+          fetch("/api/memory", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: rest, kind: "note" }) })
+            .then(() => { addLine("sys", "Memory imprinted."); if (window.JarvisBrain) JarvisBrain.reload(); });
+          return;
+        }
+        // RECALL <query> → fetch related memories.
+        if (cmd.startsWith("RECALL ")) {
+          fetch("/api/memory", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ recall: rest }) })
+            .then((r) => r.json()).then((d) => {
+              const mems = (d.memories || []);
+              addLine("jarvis", mems.length ? "Recalled:\n" + mems.map((m) => "• " + m.text).join("\n") : "No related memories.");
+            });
           return;
         }
         return streamChat(text);
+      }
     }
   }
 
@@ -348,6 +376,10 @@
       setTimeout(() => $("agent-query").focus(), 50);
     }
     if (name === "device" && window.JarvisDevice) JarvisDevice.init();
+    if (window.JarvisBrain) (name === "brain" ? JarvisBrain.show() : JarvisBrain.hide());
+    if (name === "recon" && !window.matchMedia("(pointer: coarse)").matches) {
+      setTimeout(() => $("recon-email").focus(), 50);
+    }
   }
   $("tabs").addEventListener("click", (e) => {
     const t = e.target.closest(".tab");
@@ -676,6 +708,48 @@
     if (e.key === "Enter") runAgents();
   });
 
+  // ── RECON (email-exposure OSINT) ──────────────────────────────────────
+  function reconGate() {
+    const ok = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test($("recon-email").value.trim()) && $("recon-auth").checked;
+    $("recon-run").disabled = !ok;
+  }
+  $("recon-email").addEventListener("input", reconGate);
+  $("recon-auth").addEventListener("change", reconGate);
+
+  function srcTag(s) { return s === "simulated" ? '<span class="agent-mode offline">SIM</span>' : `<span class="agent-mode">${esc(s)}</span>`; }
+  async function runRecon(email) {
+    const e = (email || $("recon-email").value).trim();
+    if (e) $("recon-email").value = e;
+    if (!$("recon-auth").checked) { $("recon-auth").focus(); return; }
+    const body = $("recon-body");
+    body.innerHTML = '<div class="loading">scanning account directories & breach metadata…</div>';
+    try {
+      const r = await fetch("/api/osint", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: e, authorized: true }),
+      });
+      const d = await r.json();
+      if (d.error) { body.innerHTML = `<div class="err">${esc(d.error)}${d.notice ? " — " + esc(d.notice) : ""}</div>`; return; }
+      const accounts = d.accounts.map((a) =>
+        `<div class="rec-acct ${a.exists ? "yes" : "no"}"><span>${a.exists ? "◉" : "○"}</span> ${esc(a.site)}</div>`).join("");
+      const breaches = (d.breaches || []).map((b) =>
+        `<div class="rec-breach"><b>${esc(b.name)}</b> <span class="news-src">${esc(b.date)} · ${Number(b.pwnCount).toLocaleString()} accts</span>` +
+        `<div class="rec-classes">${(b.dataClasses || []).map((c) => `<span>${esc(c)}</span>`).join("")}</div></div>`).join("") ||
+        '<div class="news-src">no breach records in directory</div>';
+      body.innerHTML =
+        `<div class="rec-head">⊠ ${esc(d.email)} ${d.simulated ? srcTag("simulated") : ""}` +
+        ` <span class="news-src">accounts ${srcTag(d.sources.accounts)} · breaches ${srcTag(d.sources.breaches)}</span></div>` +
+        `<div class="rec-cols">` +
+        `<div class="rec-col"><div class="dev-sec">ACCOUNTS · ${d.accounts_found}/${d.accounts_checked} found</div>${accounts}</div>` +
+        `<div class="rec-col"><div class="dev-sec">BREACH DIRECTORIES · ${d.breach_count}</div>${breaches}</div>` +
+        `</div><p class="dev-note">${esc(d.notice)}</p>`;
+    } catch (err) {
+      body.innerHTML = `<div class="err">recon failed: ${esc(err.message)}</div>`;
+    }
+  }
+  $("recon-run").addEventListener("click", () => runRecon());
+  $("recon-email").addEventListener("keydown", (e) => { if (e.key === "Enter" && !$("recon-run").disabled) runRecon(); });
+
   // ── settings modal (paste API keys) ───────────────────────────────────
   const modal = $("settings-modal");
   function stateLabel(p) {
@@ -688,8 +762,13 @@
       const s = await getJSON("/api/settings");
       $("ds-state").textContent = stateLabel(s.deepseek);
       $("ds-state").className = "key-state " + (s.deepseek.configured ? "ok" : "off");
+      if (s.hibp) {
+        $("hibp-state").textContent = stateLabel(s.hibp);
+        $("hibp-state").className = "key-state " + (s.hibp.configured ? "ok" : "off");
+      }
     } catch (e) { /* ignore */ }
     $("ds-key").value = "";
+    $("hibp-key").value = "";
     $("settings-msg").textContent = "";
     modal.hidden = false;
   }
@@ -698,6 +777,7 @@
     // Empty string clears; only send the field if the operator touched it.
     const body = {};
     if (clear || $("ds-key").value) body.deepseek_api_key = clear ? "" : $("ds-key").value;
+    if (clear || $("hibp-key").value) body.hibp_api_key = clear ? "" : $("hibp-key").value;
     $("settings-msg").textContent = "saving…";
     try {
       await fetch("/api/settings", {

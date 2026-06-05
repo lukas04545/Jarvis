@@ -56,19 +56,27 @@ def deepseek_key() -> str:
         return _overrides.get("deepseek_api_key") or config.DEEPSEEK_API_KEY
 
 
+def hibp_key() -> str:
+    with _lock:
+        return _overrides.get("hibp_api_key") or os.environ.get("HIBP_API_KEY", "")
+
+
 def ai_online() -> bool:
     return bool(deepseek_key())
 
 
-def set_keys(deepseek_api_key: str | None = None) -> None:
+def set_keys(deepseek_api_key: str | None = None, hibp_api_key: str | None = None) -> None:
     """Update keys. Pass an empty string to clear one; ``None`` leaves it as-is."""
     with _lock:
-        if deepseek_api_key is not None:
-            value = deepseek_api_key.strip()
+        for field, value in (("deepseek_api_key", deepseek_api_key),
+                             ("hibp_api_key", hibp_api_key)):
+            if value is None:
+                continue
+            value = value.strip()
             if value:
-                _overrides["deepseek_api_key"] = value
+                _overrides[field] = value
             else:
-                _overrides.pop("deepseek_api_key", None)
+                _overrides.pop(field, None)
         _persist()
 
 
@@ -78,8 +86,10 @@ def status() -> dict:
     # keys came from the UI under a single lock. Never hold _lock across a call
     # that re-acquires it — _lock is non-reentrant.
     ds_configured = bool(deepseek_key())
+    hibp_configured = bool(hibp_key())
     with _lock:
         ds_from_ui = bool(_overrides.get("deepseek_api_key"))
+        hibp_from_ui = bool(_overrides.get("hibp_api_key"))
 
     def src(from_ui: bool, env_present: bool) -> str:
         return "ui" if from_ui else ("env" if env_present else "none")
@@ -88,5 +98,9 @@ def status() -> dict:
         "deepseek": {
             "configured": ds_configured,
             "source": src(ds_from_ui, bool(config.DEEPSEEK_API_KEY)),
+        },
+        "hibp": {
+            "configured": hibp_configured,
+            "source": src(hibp_from_ui, bool(os.environ.get("HIBP_API_KEY"))),
         },
     }

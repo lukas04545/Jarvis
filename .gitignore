@@ -1,6 +1,8 @@
 # Environment / secrets
 .env
 .jarvis_secrets.json
+.jarvis_brain.json
+.jarvis_brain.json.tmp
 
 # Python
 __pycache__/

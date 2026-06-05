@@ -11,7 +11,8 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from jarvis import (  # noqa: E402
-    agents, deepseek, device, fallback, forecast, news, runtime, signals, surveillance, webcams,
+    agents, deepseek, device, fallback, forecast, memory, news, osint, runtime,
+    signals, surveillance, webcams,
 )
 from jarvis.cache import TTLCache  # noqa: E402
 import app as app_module  # noqa: E402
@@ -31,9 +32,12 @@ def offline_data(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def isolate_runtime(tmp_path, monkeypatch):
-    """Keep the runtime key store empty + writes confined to a temp file."""
+    """Keep the runtime key store + brain confined to temp; reset rate limiter."""
     monkeypatch.setattr(runtime, "_SECRETS_PATH", str(tmp_path / "secrets.json"))
     monkeypatch.setattr(runtime, "_overrides", {})
+    monkeypatch.setattr(memory, "_PATH", str(tmp_path / "brain.json"))
+    monkeypatch.setattr(memory, "_neurons", {})
+    osint._HITS.clear()
 
 
 @pytest.fixture
@@ -400,6 +404,103 @@ def test_expanded_agent_roster_and_routing():
     # Device wording routes to SENTINEL; routing is capped.
     assert "SENTINEL" in [a.name for a in agents.route("check my device memory and screen")]
     assert len(agents.route("health energy climate cyber market conflict device weather")) <= agents.MAX_AGENTS
+
+
+# ── Persistent memory / brain ──────────────────────────────────────────────
+def test_memory_add_recall_and_edges():
+    a = memory.add("Tensions rising on the eastern border", kind="intel")
+    memory.add("Border ceasefire talks collapse", kind="intel")
+    memory.add("Bitcoin rallies on ETF inflows", kind="markets")
+    assert a
+    g = memory.graph()
+    assert g["count"] == 3
+    # The two border memories share keywords → at least one synapse.
+    assert g["synapses"] >= 1
+    hits = memory.recall("border ceasefire", k=2)
+    assert hits and any("border" in h["text"].lower() for h in hits)
+
+
+def test_memory_persists_to_disk(tmp_path, monkeypatch):
+    path = str(tmp_path / "b.json")
+    monkeypatch.setattr(memory, "_PATH", path)
+    monkeypatch.setattr(memory, "_neurons", {})
+    memory.add("Persistent neuron")
+    assert os.path.exists(path)
+
+
+def test_memory_endpoints(client):
+    assert client.post("/api/memory", json={"text": "Remember the Alamo"}).get_json()["ok"]
+    g = client.get("/api/memory").get_json()
+    assert g["count"] == 1
+    rec = client.post("/api/memory", json={"recall": "alamo"}).get_json()
+    assert rec["memories"] and "Alamo" in rec["memories"][0]["text"]
+
+
+def test_chat_context_includes_memory(client, monkeypatch):
+    monkeypatch.setattr(deepseek.config, "DEEPSEEK_API_KEY", "")
+    memory.add("Operator prefers terse briefings")
+    # Offline reply still proves the route works; memory recall must not error.
+    r = client.post("/api/chat", json={"message": "give me a briefing"})
+    assert r.status_code == 200
+
+
+# ── OSINT / email exposure (holehe + breach metadata) ──────────────────────
+def test_osint_requires_authorization(client):
+    r = client.post("/api/osint", json={"email": "test@example.com", "authorized": False})
+    assert r.status_code == 403
+    assert "authoriz" in r.get_json()["error"].lower()
+
+
+def test_osint_rejects_invalid_email(client):
+    r = client.post("/api/osint", json={"email": "not-an-email", "authorized": True})
+    assert r.status_code == 400
+
+
+def test_osint_returns_metadata_never_passwords():
+    res = osint.check_email("user@example.com", authorized=True)
+    assert res["email"] == "user@example.com"
+    assert res["accounts_checked"] == len(osint.SITES)
+    assert "accounts_found" in res and isinstance(res["breaches"], list)
+    # Breach entries are metadata only (data-class *labels*, no leaked values).
+    for b in res["breaches"]:
+        assert set(b) <= {"name", "domain", "date", "pwnCount", "dataClasses"}
+        assert all(isinstance(c, str) for c in b["dataClasses"])
+    # Hard guarantee: no field anywhere leaks credentials/plaintext records.
+    def keys(o):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                yield k.lower(); yield from keys(v)
+        elif isinstance(o, list):
+            for v in o:
+                yield from keys(v)
+    bad = {"password", "passwd", "credential", "credentials", "plaintext", "hash", "secret"}
+    assert not (set(keys(res)) & bad)
+
+
+def test_osint_rate_limit():
+    for _ in range(osint._MAX_PER_MIN):
+        osint.check_email("a@b.co", authorized=True)
+    blocked = osint.check_email("a@b.co", authorized=True)
+    assert "rate limit" in blocked.get("error", "")
+
+
+# ── Expanded harness: RECON + CORTEX desks ─────────────────────────────────
+def test_recon_agent_runs_osint_from_task():
+    out = agents.TOOLS  # base tools unchanged
+    assert "device" in out
+    digest = agents.CONTEXT_TOOLS["osint"]("check exposure for jane@example.com please")
+    assert "jane@example.com" in digest and "accounts found" in digest
+
+
+def test_cortex_rides_along_when_memory_exists():
+    memory.add("Prior assessment: supply-chain stress elevated")
+    names = [a.name for a in agents.route("supply-chain assessment")]
+    assert "CORTEX" in names
+
+
+def test_full_roster_has_recon_and_cortex():
+    assert {"RECON", "CORTEX"} <= set(agents.AGENTS_BY_NAME)
+    assert len(agents.AGENTS) >= 13
 
 
 def test_forecast_endpoint(client, monkeypatch):

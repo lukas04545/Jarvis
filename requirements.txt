@@ -2,3 +2,8 @@ Flask==3.0.3
 requests==2.32.3
 feedparser==6.0.11
 python-dotenv==1.0.1
+
+# Optional — enables LIVE holehe email→account discovery in the RECON desk.
+# Runs only when JARVIS_ENABLE_HOLEHE=1; the feature degrades to a simulated
+# footprint when absent, so this can be omitted on constrained installs.
+holehe==1.61

@@ -27,7 +27,9 @@ from jarvis import (
     forecast,
     gdelt,
     markets,
+    memory,
     news,
+    osint,
     runtime,
     satellite,
     signals,
@@ -77,8 +79,43 @@ def api_get_settings():
 @app.route("/api/settings", methods=["POST"])
 def api_set_settings():
     body = request.get_json(silent=True) or {}
-    runtime.set_keys(deepseek_api_key=body.get("deepseek_api_key"))
+    runtime.set_keys(
+        deepseek_api_key=body.get("deepseek_api_key"),
+        hibp_api_key=body.get("hibp_api_key"),
+    )
     return jsonify({"ok": True, "providers": runtime.status()})
+
+
+@app.route("/api/osint", methods=["POST"])
+def api_osint():
+    body = request.get_json(silent=True) or {}
+    result = osint.check_email(body.get("email", ""), authorized=bool(body.get("authorized")))
+    code = 200
+    if result.get("error") == "authorization required":
+        code = 403
+    elif result.get("error"):
+        code = 400
+    return jsonify(result), code
+
+
+@app.route("/api/memory", methods=["GET"])
+def api_memory():
+    return jsonify({**memory.graph(), "stats": memory.stats()})
+
+
+@app.route("/api/memory", methods=["POST"])
+def api_memory_add():
+    body = request.get_json(silent=True) or {}
+    if body.get("recall"):
+        return jsonify({"memories": memory.recall(str(body["recall"]), k=int(body.get("k", 6)))})
+    nid = memory.add(str(body.get("text", "")), kind=str(body.get("kind", "note")),
+                     tags=body.get("tags"))
+    return jsonify({"ok": bool(nid), "id": nid, **memory.graph()})
+
+
+@app.route("/api/memory/<nid>", methods=["DELETE"])
+def api_memory_forget(nid):
+    return jsonify({"ok": memory.forget(nid)})
 
 
 @app.route("/api/webcams")
@@ -188,21 +225,25 @@ def api_briefing():
 def _chat_inputs() -> tuple[str, str | None]:
     body = request.get_json(silent=True) or {}
     prompt = (body.get("message") or "").strip()
-    context = None
-    # Optionally enrich the conversation with the live picture so JARVIS can
-    # reason over current events without the operator pasting them in.
+    parts = []
+    # Persistent memory: recall related neurons so JARVIS has continuity.
+    try:
+        mem = memory.recall(prompt, k=5)
+        if mem:
+            parts.append("Relevant long-term memory:\n" +
+                         "\n".join(f"- {m['text']}" for m in mem))
+    except Exception:
+        pass
+    # Optionally enrich with the live picture so JARVIS can reason over events.
     if body.get("with_context"):
         try:
             n = news.get_news()
             s = surveillance.get_surveillance()
             heads = "; ".join(it["title"] for it in n["items"][:10])
-            context = (
-                f"Threat posture {s['posture']}. "
-                f"Recent headlines: {heads}"
-            )
+            parts.append(f"Threat posture {s['posture']}. Recent headlines: {heads}")
         except Exception:
-            context = None
-    return prompt, context
+            pass
+    return prompt, ("\n\n".join(parts) or None)
 
 
 @app.route("/api/chat", methods=["POST"])

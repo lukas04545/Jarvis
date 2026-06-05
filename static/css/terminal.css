@@ -396,6 +396,37 @@ body { display: flex; flex-direction: column; }
 .agent-mode.error { color: var(--red); border-color: var(--red); }
 .agent-findings { color: var(--text); font-size: 12px; line-height: 1.45; margin-top: 6px; white-space: pre-wrap; word-break: break-word; }
 
+/* ── BRAIN (neural memory) VIEW ────────────────────────────────────────── */
+.brain-view { gap: 6px; padding: 6px; }
+.brain-wrap { position: relative; flex: 1; min-width: 0; background: radial-gradient(circle at 50% 45%, #0b1020, #04060c 80%); border: 1px solid var(--grid-line); overflow: hidden; }
+#brain-canvas { position: absolute; inset: 0; display: block; cursor: grab; touch-action: none; }
+#brain-canvas:active { cursor: grabbing; }
+.brain-kinds { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+.kind-chip { font-size: 9px; border: 1px solid; padding: 0 5px; letter-spacing: 1px; }
+.brain-rail { width: 320px; flex-shrink: 0; background: var(--panel); border: 1px solid var(--grid-line); display: flex; flex-direction: column; overflow-y: auto; }
+.brain-rail #brain-input { width: 100%; background: var(--bg); border: 1px solid var(--grid-line); color: var(--amber); font-family: var(--font); font-size: 13px; padding: 7px 9px; outline: none; }
+.brain-mem { color: var(--text); font-size: 13px; line-height: 1.45; margin: 6px 0; }
+
+/* ── RECON (OSINT) VIEW ────────────────────────────────────────────────── */
+.recon-view { padding: 6px; }
+.recon-main { flex: 1; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--grid-line); overflow: hidden; min-width: 0; }
+.recon-input { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--panel-2); border-bottom: 1px solid var(--grid-line); }
+.recon-input .prompt { color: var(--cyan); font-weight: 600; }
+#recon-email { flex: 1; background: transparent; border: none; outline: none; color: var(--amber); font-family: var(--font); font-size: 14px; }
+#recon-run { flex-shrink: 0; }
+.recon-consent { display: flex; align-items: center; gap: 8px; padding: 8px 12px; color: var(--text-dim); font-size: 11px; border-bottom: 1px solid var(--grid-line); }
+.recon-consent input { accent-color: var(--amber); }
+.recon-body { flex: 1; overflow-y: auto; padding: 10px 12px; }
+.rec-head { color: var(--cyan); font-size: 12px; letter-spacing: 1px; margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.rec-cols { display: grid; grid-template-columns: 1fr 1.2fr; gap: 14px; }
+.rec-acct { font-size: 11px; padding: 2px 0; color: var(--text-dim); }
+.rec-acct.yes { color: var(--green); } .rec-acct.yes span { color: var(--green); }
+.rec-acct.no span { color: var(--grid-line); }
+.rec-breach { padding: 5px 0; border-bottom: 1px solid #11161f; }
+.rec-breach b { color: var(--red); }
+.rec-classes { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
+.rec-classes span { font-size: 9px; color: var(--amber); border: 1px solid var(--amber-dim); padding: 0 4px; }
+
 /* ── DEVICE SENSORS VIEW ───────────────────────────────────────────────── */
 .device-view { padding: 6px; overflow-y: auto; }
 .device-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 6px; align-content: start; width: 100%; }
@@ -474,6 +505,13 @@ body { display: flex; flex-direction: column; }
 
   /* Device sensors: single column. */
   .device-grid { grid-template-columns: 1fr; }
+
+  /* Brain + recon stack on phones. */
+  .brain-view { flex-direction: column; overflow-y: auto; }
+  .brain-wrap { min-height: 56vh; }
+  .brain-rail { width: auto; }
+  .rec-cols { grid-template-columns: 1fr; }
+  #recon-email { font-size: 16px; }
 }
 
 /* Standalone (installed PWA) — reclaim the browser chrome space. */

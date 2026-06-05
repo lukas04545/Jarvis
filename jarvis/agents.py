@@ -14,12 +14,16 @@ data-derived briefing instead of model prose, so the harness stays demonstrable.
 """
 from __future__ import annotations
 
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, Dict, Iterator, List
 
-from jarvis import deepseek, device, gdelt, markets, news, runtime, satellite, signals, surveillance
+from jarvis import (deepseek, device, gdelt, markets, memory, news, osint, runtime,
+                    satellite, signals, surveillance)
+
+_EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -111,6 +115,34 @@ TOOLS: Dict[str, Callable[[], str]] = {
 }
 
 
+# Context tools take the task text (e.g. to extract an email or recall memory).
+def _osint_digest(task: str) -> str:
+    m = _EMAIL_RE.search(task or "")
+    if not m:
+        return "(no email address in the tasking — provide one to run exposure recon)"
+    r = osint.check_email(m.group(0), authorized=True)  # operator-initiated
+    if r.get("error"):
+        return f"recon error: {r['error']}"
+    sites = ", ".join(a["site"] for a in r["accounts"] if a.get("exists")) or "none detected"
+    brs = ", ".join(f"{b['name']}({b['date']})" for b in r["breaches"]) or "none"
+    sim = " [SIM]" if r.get("simulated") else ""
+    return (f"target {r['email']}{sim} — accounts found {r['accounts_found']}/{r['accounts_checked']}: "
+            f"{sites}; breach directories: {brs}. (metadata only, no credentials)")
+
+
+def _memory_digest(task: str) -> str:
+    hits = memory.recall(task, k=6)
+    if not hits:
+        return "(no related long-term memories)"
+    return "\n".join(f"- [{h['kind']}] {h['text']}" for h in hits)
+
+
+CONTEXT_TOOLS: Dict[str, Callable[[str], str]] = {
+    "osint": _osint_digest,
+    "memory": _memory_digest,
+}
+
+
 # ─────────────────────────────────────────────────────────────────────────
 #  Agents
 # ─────────────────────────────────────────────────────────────────────────
@@ -122,19 +154,20 @@ class Agent:
     tools: List[str]
     keywords: List[str] = field(default_factory=list)
 
-    def gather(self) -> str:
+    def gather(self, task: str = "") -> str:
         blocks = []
         for t in self.tools:
-            fn = TOOLS.get(t)
-            if fn:
-                try:
-                    blocks.append(f"[{t}]\n{fn()}")
-                except Exception as exc:
-                    blocks.append(f"[{t}] unavailable: {exc}")
+            try:
+                if t in TOOLS:
+                    blocks.append(f"[{t}]\n{TOOLS[t]()}")
+                elif t in CONTEXT_TOOLS:
+                    blocks.append(f"[{t}]\n{CONTEXT_TOOLS[t](task)}")
+            except Exception as exc:
+                blocks.append(f"[{t}] unavailable: {exc}")
         return "\n\n".join(blocks)
 
     def run(self, task: str) -> Dict:
-        context = self.gather()
+        context = self.gather(task)
         if runtime.ai_online():
             messages = [
                 {"role": "system", "content": self.system},
@@ -229,6 +262,21 @@ AGENTS: List[Agent] = [
           ["signals", "headlines"],
           ["red team", "redcell", "worst case", "adversary", "challenge", "devil",
            "contrarian", "blind spot", "what could go wrong", "risk"]),
+    Agent("RECON", "OSINT email-exposure analyst",
+          "You are RECON, an OSINT analyst. Given an email-exposure footprint "
+          "(registered accounts + breach-directory metadata), summarise the subject's "
+          "public attack surface and defensive recommendations. Authorised/defensive "
+          "use only; never request or output credentials.",
+          ["osint"],
+          ["email", "osint", "holehe", "breach", "exposure", "account", "pwned",
+           "leak", "footprint", "recon", "@"]),
+    Agent("CORTEX", "Memory & recall analyst",
+          "You are CORTEX, the memory desk. Relate the current tasking to JARVIS's "
+          "long-term memory and surface relevant prior knowledge, prior assessments "
+          "and continuity the other desks should account for.",
+          ["memory"],
+          ["remember", "recall", "memory", "previously", "before", "history",
+           "last time", "earlier", "context"]),
 ]
 
 AGENTS_BY_NAME = {a.name: a for a in AGENTS}
@@ -249,7 +297,18 @@ def route(query: str) -> List[Agent]:
     if "ORACLE" not in names and any(w in q for w in ("predict", "forecast", "future", "next", "will", "likely")):
         selected.append(AGENTS_BY_NAME["ORACLE"])
         names.add("ORACLE")
+    # CORTEX rides along whenever the brain holds relevant memory (continuity).
+    if "CORTEX" not in names and memory.recall(query, k=1):
+        selected.append(AGENTS_BY_NAME["CORTEX"])
+        names.add("CORTEX")
     return selected[:MAX_AGENTS]
+
+
+def _remember_result(query: str, synthesis: Dict) -> None:
+    text = (synthesis or {}).get("text", "")
+    bluf = text.strip().split("\n", 1)[0][:200]
+    if bluf and not bluf.startswith("[OFFLINE]") and not bluf.startswith("[SYNTHESIS"):
+        memory.add(f"Tasking '{query[:80]}' → {bluf}", kind="taskforce")
 
 
 DIRECTOR_SYSTEM = (
@@ -294,6 +353,7 @@ def run_taskforce(query: str) -> Dict:
     order = {a.name: i for i, a in enumerate(agents)}
     results.sort(key=lambda r: order.get(r["name"], 99))
     synthesis = synthesise(query, results)
+    _remember_result(query, synthesis)
     return {
         "query": query,
         "plan": [a.name for a in agents],
@@ -324,5 +384,6 @@ def stream_taskforce(query: str) -> Iterator[Dict]:
     order = {a.name: i for i, a in enumerate(agents)}
     results.sort(key=lambda r: order.get(r["name"], 99))
     synthesis = synthesise(query, results)
+    _remember_result(query, synthesis)
     yield {"type": "synthesis", "synthesis": synthesis}
     yield {"type": "done"}

@@ -44,6 +44,8 @@
     <button class="tab" data-view="globe">◉ ORBITAL GLOBE</button>
     <button class="tab" data-view="forecast">⊹ ORACLE · FORECAST</button>
     <button class="tab" data-view="agents">⌬ AGENT MESH</button>
+    <button class="tab" data-view="brain">✺ BRAIN</button>
+    <button class="tab" data-view="recon">⊠ RECON</button>
     <button class="tab" data-view="device">⊟ DEVICE SENSORS</button>
   </nav>
 
@@ -183,6 +185,57 @@
     </div>
   </section>
 
+  <!-- ══ VIEW: BRAIN (neural memory) ══════════════════════════════════════ -->
+  <section class="view brain-view" id="view-brain">
+    <div class="brain-wrap">
+      <canvas id="brain-canvas"></canvas>
+      <div class="globe-hud">
+        <div class="globe-hud-title">✺ NEURAL MEMORY</div>
+        <div class="globe-coords" id="brain-stats">0 neurons · 0 synapses</div>
+        <div class="brain-kinds" id="brain-kinds"></div>
+      </div>
+      <div class="globe-hint">drag neurons · click to inspect · the brain persists across sessions</div>
+    </div>
+    <aside class="brain-rail">
+      <div class="panel-head"><span>✺ MEMORY</span><span class="panel-meta" id="brain-meta">persistent</span></div>
+      <div class="rail-box" id="brain-detail">Select a neuron to inspect the memory.</div>
+      <div class="rail-box">
+        <div class="agents-input" style="border:none;padding:0;background:none">
+          <input id="brain-input" autocomplete="off" placeholder="imprint a memory / fact…" />
+        </div>
+        <div class="dev-actions" style="padding:8px 0 0">
+          <button id="brain-add" class="btn-primary">✦ IMPRINT</button>
+          <button id="brain-refresh" class="btn-ghost">⟳ SYNC</button>
+        </div>
+        <p class="dev-note" style="padding:8px 0 0">Memories also form automatically from agent taskings and chat. Shared keywords grow synapses between neurons.</p>
+      </div>
+    </aside>
+  </section>
+
+  <!-- ══ VIEW: RECON (email-exposure OSINT) ═══════════════════════════════ -->
+  <section class="view recon-view" id="view-recon">
+    <div class="recon-main">
+      <div class="agents-head">
+        <div>
+          <div class="forecast-title">⊠ RECON · EMAIL EXPOSURE OSINT</div>
+          <div class="forecast-sub">holehe-style account discovery + breach-directory metadata</div>
+        </div>
+      </div>
+      <div class="recon-input">
+        <span class="prompt">EMAIL&gt;</span>
+        <input id="recon-email" type="email" autocomplete="off" spellcheck="false" placeholder="address to check (e.g. your own)…" />
+        <button id="recon-run" class="btn-primary" disabled>▶ SCAN</button>
+      </div>
+      <label class="recon-consent">
+        <input type="checkbox" id="recon-auth" />
+        I am authorised to check this address (e.g. it is my own / an authorised investigation).
+      </label>
+      <div class="recon-body" id="recon-body">
+        <div class="loading">Authorised / defensive use only. Returns account-existence + breach metadata — never passwords or leaked record contents.</div>
+      </div>
+    </div>
+  </section>
+
   <!-- ══ VIEW: DEVICE SENSORS ═════════════════════════════════════════════ -->
   <section class="view device-view" id="view-device">
     <div class="device-grid">
@@ -255,6 +308,10 @@
         <input id="ds-key" class="key-input" type="password" autocomplete="off"
                placeholder="sk-…  (powers the J.A.R.V.I.S. AI core)" />
 
+        <label class="field-label">Have I Been Pwned API key <span class="key-state" id="hibp-state"></span></label>
+        <input id="hibp-key" class="key-input" type="password" autocomplete="off"
+               placeholder="optional — live breach-directory lookups in RECON" />
+
         <div class="modal-actions">
           <button id="settings-save" class="btn-primary">SAVE KEY</button>
           <button id="settings-clear" class="btn-ghost">CLEAR</button>
@@ -285,6 +342,7 @@
   </footer>
 
   <script src="{{ url_for('static', filename='js/globe.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/brain.js') }}"></script>
   <script src="{{ url_for('static', filename='js/device.js') }}"></script>
   <script src="{{ url_for('static', filename='js/terminal.js') }}"></script>
   <script>

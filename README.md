@@ -29,9 +29,11 @@
 | **⚙ Paste-your-key settings** | A Settings panel to paste your DeepSeek key at runtime — no file editing. Stored server-side, gitignored, never returned to the browser; the AI core flips ONLINE instantly. (Every data feed is free/keyless; only the AI core uses a key.) |
 | **⊹ ORACLE — event prediction** | A forecasting engine that fuses every signal into a quantitative vector, then produces **probabilistic predictions of future events** — each with probability, confidence, time horizon, drivers, and confirm/refute indicators. Heuristic baseline + DeepSeek structured forecasts. |
 | **Maximised data ingestion** | ~24 news feeds (wires, finance, conflict, cyber, space, science, health) pulled **concurrently**, plus **markets** (CoinGecko crypto + Stooq indices/commodities/FX) and **GDELT** global media volume & tone. |
-| **⌬ Agent Mesh** | A multi-agent harness: Director J.A.R.V.I.S. routes a tasking to **11 specialist subagents** (GEOINT, ECONINT, GEOPHYS, CYBER, ORACLE, OSINT, MEDINT, ENERGY, CLIMATE, SENTINEL, REDCELL), each with its own persona and data tools, run **concurrently** over DeepSeek and streamed live (SSE) — then fused into one attributed briefing. |
+| **⌬ Agent Mesh** | A multi-agent harness: Director J.A.R.V.I.S. routes a tasking to **13 specialist subagents** (GEOINT, ECONINT, GEOPHYS, CYBER, ORACLE, OSINT, MEDINT, ENERGY, CLIMATE, SENTINEL, REDCELL, RECON, CORTEX), each with its own persona and data tools, run **concurrently** over DeepSeek and streamed live (SSE) — then fused into one attributed briefing. |
 | **⊟ Device Sensors** | Consent-gated access to the operator's **own** device via standard browser APIs: memory/hardware/screen/network/power telemetry, **screen capture** (`getDisplayMedia`, frames stay local), and **voice input** (Web Speech API → JARVIS) plus a local input-activity meter. Telemetry syncs to the **SENTINEL** agent. See [Ethics & scope](#ethics--scope). |
 | **👁 JARVIS Vision** | Makes JARVIS *see* the shared screen — **on-device** OCR (Tesseract.js) extracts the on-screen text and a pixel-level visual summary (resolution, theme, dominant colour); the image never leaves the device. Press **ASK JARVIS** to send the extracted text to the AI for analysis. Multi-language (EN/DE/ES/FR) for both speech-to-text and OCR. |
+| **✺ Neural Brain (persistent memory)** | A persistent associative memory: each memory is a **neuron**, shared keywords form **synapses**. Rendered as connected, animated **dots** you can drag and inspect. Memories form automatically from taskings/chat (and `REMEMBER`), survive restarts, and are **recalled into context** so JARVIS has continuity. |
+| **⊠ RECON (email-exposure OSINT)** | Account-discovery (**holehe**-style) + **breach-directory** lookup for an email's public exposure. Authorised/defensive use only — requires a consent acknowledgement, one address at a time, and returns **account-existence + breach metadata only (never passwords or leaked records)**. See [Ethics & scope](#ethics--scope). |
 
 ## Quick start
 
@@ -125,7 +127,9 @@ jarvis/
   gdelt.py              GDELT global media volume + tone signals
   signals.py            quantitative signal vector + momentum + anomalies
   forecast.py           ORACLE — heuristic + DeepSeek event predictions
-  agents.py             multi-agent harness (Director + 11 specialist subagents)
+  agents.py             multi-agent harness (Director + 13 specialist subagents)
+  memory.py             persistent neural memory (neurons + synapses)
+  osint.py              email-exposure recon (holehe + breach metadata)
   device.py             device-telemetry store (in-memory, sanitised, local)
   briefing.py           AI briefing synthesis from the live picture
   cache.py              thread-safe TTL cache (stale-on-error)
@@ -134,6 +138,7 @@ templates/index.html    terminal + globe layout, tabs, settings modal
 static/css/terminal.css Bloomberg-style phosphor UI (+ mobile/PWA responsive)
 static/js/terminal.js   client controller (feeds, console, tabs, settings, webcams)
 static/js/globe.js      dependency-free 3D orbital intelligence globe
+static/js/brain.js      neural-memory graph (force-directed neuron dots)
 static/js/device.js     local device sensors (telemetry, screen, voice, input)
 static/js/sw.js         service worker (offline shell, network-first API)
 static/manifest.webmanifest  PWA manifest (icons, shortcuts)
@@ -159,6 +164,8 @@ tests/test_jarvis.py    network-free unit + API + PWA tests
 | `GET` | `/api/forecast` | **ORACLE** — probabilistic predictions of future events |
 | `POST` | `/api/agents` · `/api/agents/stream` | **Agent Mesh** — multi-agent taskforce (JSON / SSE) |
 | `GET`/`POST` | `/api/device` | device telemetry store (read / report from own browser) |
+| `GET`/`POST`/`DELETE` | `/api/memory` | neural memory — graph / imprint / recall / forget |
+| `POST` | `/api/osint` | email-exposure recon (authorised; metadata only) |
 | `GET` | `/api/briefing` | AI situational briefing |
 | `POST` | `/api/chat` · `/api/chat/stream` | JARVIS reply (JSON / SSE) |
 
@@ -202,6 +209,8 @@ A small but real multi-agent system (`agents.py`) layered over DeepSeek:
   | CLIMATE | climate & environment | satellite, surveillance, disaster news |
   | SENTINEL | local device & sensors | device telemetry |
   | REDCELL | adversarial red-team | signals, headlines |
+  | RECON | OSINT email exposure | holehe + breach metadata |
+  | CORTEX | memory & recall | persistent brain |
 - **Director** — `run_taskforce(query)` **routes** the tasking to the relevant
   desks (keyword routing + a core-desk fallback), runs them **concurrently**,
   then **synthesises** their reports into one briefing with attribution
@@ -218,7 +227,7 @@ Use the **⌬ AGENT MESH** tab, or type `AGENTS <tasking>` in the console
 
 ```bash
 . .venv/bin/activate && pip install pytest
-python -m pytest -q          # 43 passing, no network required
+python -m pytest -q          # 54 passing, no network required
 ```
 
 ## Ethics & scope
@@ -247,3 +256,11 @@ covert collection tool.
 - **JARVIS Vision** reads the screen with **on-device OCR** (Tesseract.js runs in
   the browser); the captured image is never uploaded. The extracted text is only
   sent to the AI when the operator explicitly presses **ASK JARVIS**.
+- **RECON (email OSINT)** is for **authorised / defensive use only** — checking
+  your *own* exposure or an authorised investigation. It requires an explicit
+  consent acknowledgement, handles **one address at a time** with a rate limit
+  (no mass enumeration), and returns **account-existence booleans + breach
+  *metadata*** (names, dates, record counts, data-class *categories*) — it never
+  retrieves or returns **passwords or leaked record contents**. Live `holehe`
+  runs are opt-in (`JARVIS_ENABLE_HOLEHE=1`); breach lookups use the
+  Have I Been Pwned API key if provided, else a labelled simulated footprint.
