@@ -29,6 +29,7 @@
 | **⚙ Paste-your-key settings** | A Settings panel to paste your DeepSeek key at runtime — no file editing. Stored server-side, gitignored, never returned to the browser; the AI core flips ONLINE instantly. (Every data feed is free/keyless; only the AI core uses a key.) |
 | **⊹ ORACLE — event prediction** | A forecasting engine that fuses every signal into a quantitative vector, then produces **probabilistic predictions of future events** — each with probability, confidence, time horizon, drivers, and confirm/refute indicators. Heuristic baseline + DeepSeek structured forecasts. |
 | **Maximised data ingestion** | ~24 news feeds (wires, finance, conflict, cyber, space, science, health) pulled **concurrently**, plus **markets** (CoinGecko crypto + Stooq indices/commodities/FX) and **GDELT** global media volume & tone. |
+| **⌬ Agent Mesh** | A multi-agent harness: Director J.A.R.V.I.S. routes a tasking to specialist subagents (**GEOINT, ECONINT, GEOPHYS, CYBER, ORACLE**), each with its own persona and data tools, run **concurrently** over DeepSeek and streamed live (SSE) — then fused into one attributed briefing. |
 
 ## Quick start
 
@@ -122,6 +123,7 @@ jarvis/
   gdelt.py              GDELT global media volume + tone signals
   signals.py            quantitative signal vector + momentum + anomalies
   forecast.py           ORACLE — heuristic + DeepSeek event predictions
+  agents.py             multi-agent harness (Director + specialist subagents)
   briefing.py           AI briefing synthesis from the live picture
   cache.py              thread-safe TTL cache (stale-on-error)
   fallback.py           SIMULATED sample datasets
@@ -151,6 +153,7 @@ tests/test_jarvis.py    network-free unit + API + PWA tests
 | `GET` | `/api/gdelt` | global media coverage volume + tone by theme |
 | `GET` | `/api/signals` | unified quantitative signal vector + anomalies |
 | `GET` | `/api/forecast` | **ORACLE** — probabilistic predictions of future events |
+| `POST` | `/api/agents` · `/api/agents/stream` | **Agent Mesh** — multi-agent taskforce (JSON / SSE) |
 | `GET` | `/api/briefing` | AI situational briefing |
 | `POST` | `/api/chat` · `/api/chat/stream` | JARVIS reply (JSON / SSE) |
 
@@ -175,11 +178,36 @@ The ORACLE turns the firehose of data into falsifiable forecasts:
 Run it from the **⊹ ORACLE · FORECAST** tab, or type `FORECAST` in the console.
 Probabilities are model estimates over the stated horizon, not certainties.
 
+## ⌬ Agent Mesh — the multi-agent harness
+
+A small but real multi-agent system (`agents.py`) layered over DeepSeek:
+
+- **Subagents** — each `Agent` is a specialist with its own persona and a set of
+  *tools* (the live data modules it may read):
+  | Agent | Desk | Tools |
+  |---|---|---|
+  | GEOINT | geopolitics & conflict | conflict headlines, GDELT, surveillance |
+  | ECONINT | markets & macro | markets, market headlines, GDELT |
+  | GEOPHYS | disasters & earth systems | seismic, satellite events, disaster news |
+  | CYBER | cyber & tech threats | cyber/tech/space headlines |
+  | ORACLE | forecasting | signal momentum + GDELT |
+- **Director** — `run_taskforce(query)` **routes** the tasking to the relevant
+  desks (keyword routing + a core-desk fallback), runs them **concurrently**,
+  then **synthesises** their reports into one briefing with attribution
+  ("GEOINT assesses…"). `stream_taskforce` emits `plan → agent… → synthesis`
+  events over SSE for a live build-up in the UI.
+- **Graceful offline** — with no DeepSeek key each desk returns a clearly
+  labelled, data-derived working set instead of model prose, so the harness
+  stays demonstrable.
+
+Use the **⌬ AGENT MESH** tab, or type `AGENTS <tasking>` in the console
+(e.g. `AGENTS assess escalation risk in the South China Sea`).
+
 ## Tests
 
 ```bash
 . .venv/bin/activate && pip install pytest
-python -m pytest -q          # 32 passing, no network required
+python -m pytest -q          # 39 passing, no network required
 ```
 
 ## Ethics & scope

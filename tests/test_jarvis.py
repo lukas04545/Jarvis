@@ -11,7 +11,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from jarvis import (  # noqa: E402
-    deepseek, fallback, forecast, news, runtime, signals, surveillance, webcams,
+    agents, deepseek, fallback, forecast, news, runtime, signals, surveillance, webcams,
 )
 from jarvis.cache import TTLCache  # noqa: E402
 import app as app_module  # noqa: E402
@@ -310,6 +310,52 @@ def test_generate_forecast_falls_back_to_heuristic_offline(offline_data, monkeyp
     assert fc["method"] in ("heuristic", "ai+heuristic")
     assert "predictions" in fc and "signals" in fc
     assert all(0.05 <= p["probability"] <= 0.95 for p in fc["predictions"])
+
+
+# ── Agent harness ──────────────────────────────────────────────────────────
+def test_agent_routing_picks_specialists_and_core():
+    geo = [a.name for a in agents.route("assess military escalation on the border")]
+    assert "GEOINT" in geo
+    econ = [a.name for a in agents.route("inflation and oil market outlook")]
+    assert "ECONINT" in econ and "ORACLE" in econ          # 'outlook' → ORACLE
+    fallback_route = [a.name for a in agents.route("zxqw nonsense")]
+    assert fallback_route == agents.CORE                    # core desk fallback
+
+
+def test_agent_tool_digests_do_not_crash(offline_data):
+    for name, fn in agents.TOOLS.items():
+        out = fn()
+        assert isinstance(out, str) and out
+
+
+def test_agent_run_offline_returns_data_briefing(offline_data, monkeypatch):
+    monkeypatch.setattr(agents.runtime.config, "DEEPSEEK_API_KEY", "")
+    res = agents.AGENTS_BY_NAME["GEOINT"].run("conflict risk?")
+    assert res["name"] == "GEOINT" and res["mode"] == "offline"
+    assert "OFFLINE" in res["findings"] and res["tools"]
+
+
+def test_run_taskforce_offline_full_shape(offline_data, monkeypatch):
+    monkeypatch.setattr(agents.runtime.config, "DEEPSEEK_API_KEY", "")
+    out = agents.run_taskforce("what is likely to escalate next week?")
+    assert out["online"] is False
+    assert out["plan"] and len(out["agents"]) == len(out["plan"])
+    assert all(a["findings"] for a in out["agents"])
+    assert "text" in out["synthesis"]
+
+
+def test_agents_endpoint_requires_query(client):
+    assert client.post("/api/agents", json={"query": "  "}).status_code == 400
+
+
+def test_agents_endpoint(client, monkeypatch):
+    monkeypatch.setattr(
+        app_module.agents, "run_taskforce",
+        lambda q: {"query": q, "plan": ["GEOINT"], "agents": [
+            {"name": "GEOINT", "role": "r", "tools": [], "mode": "offline", "findings": "x"}],
+            "synthesis": {"text": "ok", "mode": "offline"}, "online": False})
+    d = client.post("/api/agents", json={"query": "test"}).get_json()
+    assert d["plan"] == ["GEOINT"] and d["agents"][0]["name"] == "GEOINT"
 
 
 def test_forecast_endpoint(client, monkeypatch):

@@ -358,6 +358,44 @@ body { display: flex; flex-direction: column; }
 .mover { display: flex; justify-content: space-between; font-size: 11px; padding: 2px 0; }
 .mover .up { color: var(--green); } .mover .down { color: var(--red); }
 
+/* ── AGENT MESH VIEW ───────────────────────────────────────────────────── */
+.agents-view { flex-direction: column; gap: 6px; padding: 6px; overflow: hidden; }
+.agents-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 14px; background: linear-gradient(90deg, #0b0f02, var(--panel-2) 70%);
+  border: 1px solid var(--amber-dim);
+}
+.agents-input {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  background: var(--panel-2); border: 1px solid var(--grid-line);
+}
+.agents-input .prompt { color: var(--cyan); font-weight: 600; flex-shrink: 0; }
+#agent-query {
+  flex: 1; background: transparent; border: none; outline: none;
+  color: var(--amber); font-family: var(--font); font-size: 13px;
+}
+#agent-query::placeholder { color: var(--text-dim); }
+#agent-run { flex-shrink: 0; font-size: 11px; padding: 6px 14px; }
+#agent-run:disabled { opacity: 0.5; cursor: wait; }
+
+.agents-body { flex: 1; overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding-top: 2px; }
+.agents-synthesis { border: 1px solid var(--amber); background: #0f0c04; padding: 10px 12px; }
+.synth-label { color: var(--amber); font-weight: 600; letter-spacing: 2px; font-size: 11px; margin-bottom: 5px; }
+.synth-text { color: var(--text); font-size: 13px; line-height: 1.5; }
+
+.agents-plan { font-size: 10px; color: var(--text-dim); display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.plan-label { letter-spacing: 1px; }
+.plan-chip { border: 1px solid; padding: 1px 7px; letter-spacing: 1px; font-weight: 600; }
+
+.agents-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; }
+.agent-card { background: var(--panel-2); border: 1px solid var(--grid-line); border-top: 2px solid var(--cyan); padding: 9px 11px; }
+.agent-name { font-weight: 600; letter-spacing: 1px; font-size: 12px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.agent-role { color: var(--text-dim); font-weight: 400; font-size: 10px; letter-spacing: 0; }
+.agent-mode { font-size: 9px; padding: 0 5px; border: 1px solid var(--grid-line); letter-spacing: 1px; }
+.agent-mode.offline { color: var(--amber); border-color: var(--amber-dim); }
+.agent-mode.error { color: var(--red); border-color: var(--red); }
+.agent-findings { color: var(--text); font-size: 12px; line-height: 1.45; margin-top: 6px; white-space: pre-wrap; word-break: break-word; }
+
 /* ── TABLET ────────────────────────────────────────────────────────────── */
 @media (max-width: 1100px) {
   .grid { grid-template-columns: 1fr 1fr; grid-auto-rows: minmax(240px, 40vh); overflow-y: auto; }
@@ -409,6 +447,10 @@ body { display: flex; flex-direction: column; }
   .forecast-rail { width: auto; }
   .forecast-main { min-height: 60vh; }
   .tabs { overflow-x: auto; white-space: nowrap; }
+
+  /* Agent mesh: single column, larger input. */
+  .agents-grid { grid-template-columns: 1fr; }
+  #agent-query { font-size: 16px; }
 }
 
 /* Standalone (installed PWA) — reclaim the browser chrome space. */

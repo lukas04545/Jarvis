@@ -43,6 +43,7 @@
     <button class="tab active" data-view="terminal">▣ TERMINAL</button>
     <button class="tab" data-view="globe">◉ ORBITAL GLOBE</button>
     <button class="tab" data-view="forecast">⊹ ORACLE · FORECAST</button>
+    <button class="tab" data-view="agents">⌬ AGENT MESH</button>
   </nav>
 
   <!-- ── NEWS TICKER ──────────────────────────────────────────────────── -->
@@ -156,6 +157,29 @@
       <div class="panel-head"><span>📡 GDELT TONE/VOLUME</span></div>
       <div class="rail-box" id="signal-gdelt"></div>
     </aside>
+  </section>
+
+  <!-- ══ VIEW: AGENT MESH ═════════════════════════════════════════════════ -->
+  <section class="view agents-view" id="view-agents">
+    <div class="agents-head">
+      <div>
+        <div class="forecast-title">⌬ AGENT MESH</div>
+        <div class="forecast-sub">Director J.A.R.V.I.S. + specialist desks · DeepSeek</div>
+      </div>
+    </div>
+    <div class="agents-input">
+      <span class="prompt">TASK&gt;</span>
+      <input id="agent-query" autocomplete="off" spellcheck="false"
+             placeholder="task the desk — e.g. 'assess escalation risk in the South China Sea' or 'what's likely next 7 days?'" />
+      <button id="agent-run" class="btn-primary">▶ DEPLOY</button>
+    </div>
+    <div class="agents-body">
+      <div class="agents-synthesis" id="agent-synthesis" hidden></div>
+      <div class="agents-plan" id="agent-plan"></div>
+      <div class="agents-grid" id="agent-grid">
+        <div class="loading">Idle. Deploy the desk against a tasking to see each subagent report, then the Director's fused briefing.</div>
+      </div>
+    </div>
   </section>
 
   <!-- ══ SETTINGS MODAL ═══════════════════════════════════════════════════ -->

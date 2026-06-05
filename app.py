@@ -20,6 +20,7 @@ from flask import Flask, Response, jsonify, render_template, request, send_from_
 from config import config
 from jarvis import (
     __version__,
+    agents,
     briefing,
     deepseek,
     forecast,
@@ -108,6 +109,35 @@ def api_signals():
 def api_forecast():
     # The ORACLE: quantitative signals + heuristic + DeepSeek predictions.
     return jsonify(forecast.generate_forecast())
+
+
+@app.route("/api/agents", methods=["POST"])
+def api_agents():
+    query = ((request.get_json(silent=True) or {}).get("query") or "").strip()
+    if not query:
+        return jsonify({"error": "empty query"}), 400
+    return jsonify(agents.run_taskforce(query))
+
+
+@app.route("/api/agents/stream", methods=["POST"])
+def api_agents_stream():
+    query = ((request.get_json(silent=True) or {}).get("query") or "").strip()
+    if not query:
+        return jsonify({"error": "empty query"}), 400
+
+    def event_stream() -> Iterator[str]:
+        try:
+            for event in agents.stream_taskforce(query):
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception as exc:  # pragma: no cover - defensive
+            yield f"data: {json.dumps({'type': 'error', 'error': str(exc)})}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return Response(
+        event_stream(),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.route("/api/news")

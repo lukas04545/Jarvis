@@ -191,6 +191,7 @@
     "  SURV            refresh the surveillance grid",
     "  BRIEF           generate an AI situational briefing",
     "  FORECAST        run the ORACLE — predict future events",
+    "  AGENTS <task>   deploy the multi-agent mesh on a tasking",
     "  REFRESH         reload all feeds",
     "  CLEAR           clear this console",
     "  <anything else> talk to J.A.R.V.I.S. (DeepSeek)",
@@ -272,7 +273,17 @@
         addLine("sys", "Engaging ORACLE — switching to forecast view…");
         showView("forecast");
         setTimeout(runForecast, 200); return;
-      default: return streamChat(text);
+      default:
+        // AGENTS <task> / TASKFORCE <task> → deploy the multi-agent mesh.
+        if (cmd === "AGENTS" || cmd === "TASKFORCE" ||
+            cmd.startsWith("AGENTS ") || cmd.startsWith("TASKFORCE ")) {
+          const task = text.replace(/^\s*\S+\s*/, "").trim();
+          addLine("sys", task ? "Deploying agent mesh…" : "Opening agent mesh — enter a tasking.");
+          showView("agents");
+          if (task) { $("agent-query").value = task; setTimeout(() => runAgents(task), 200); }
+          return;
+        }
+        return streamChat(text);
     }
   }
 
@@ -328,6 +339,9 @@
     if (name === "forecast" && !forecastReady) {
       forecastReady = true;
       loadSignals();
+    }
+    if (name === "agents" && !window.matchMedia("(pointer: coarse)").matches) {
+      setTimeout(() => $("agent-query").focus(), 50);
     }
   }
   $("tabs").addEventListener("click", (e) => {
@@ -562,6 +576,100 @@
     }
   }
   $("forecast-run").addEventListener("click", runForecast);
+
+  // ── AGENT MESH (multi-agent harness, SSE streamed) ────────────────────
+  const AGENT_COLORS = {
+    GEOINT: "var(--red)", ECONINT: "var(--green)", GEOPHYS: "var(--amber)",
+    CYBER: "#ff5db1", ORACLE: "#9d7bff",
+  };
+  let agentBusy = false;
+
+  function agentCardHTML(name, role, body, mode) {
+    const col = AGENT_COLORS[name] || "var(--cyan)";
+    const tag = mode && mode !== "ai"
+      ? `<span class="agent-mode ${esc(mode)}">${esc(mode)}</span>` : "";
+    return `<div class="agent-card" id="agent-${esc(name)}" style="border-top-color:${col}">
+      <div class="agent-name" style="color:${col}">⬡ ${esc(name)} ${tag}
+        <span class="agent-role">${esc(role)}</span></div>
+      <div class="agent-findings">${body}</div>
+    </div>`;
+  }
+
+  async function runAgents(query) {
+    if (agentBusy) return;
+    const q = (query || $("agent-query").value).trim();
+    if (!q) return;
+    agentBusy = true;
+    $("agent-run").disabled = true;
+    const synth = $("agent-synthesis");
+    synth.hidden = true; synth.innerHTML = "";
+    $("agent-plan").innerHTML = "";
+    const grid = $("agent-grid");
+    grid.innerHTML = '<div class="loading">Routing task to the desk…</div>';
+
+    try {
+      const r = await fetch("/api/agents/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: q }),
+      });
+      const reader = r.body.getReader();
+      const dec = new TextDecoder();
+      let sse = "";
+      let first = true;
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        sse += dec.decode(value, { stream: true });
+        const parts = sse.split("\n\n");
+        sse = parts.pop();
+        for (const p of parts) {
+          const m = p.match(/^data: (.*)$/m);
+          if (!m || m[1] === "[DONE]") continue;
+          let ev; try { ev = JSON.parse(m[1]); } catch { continue; }
+
+          if (ev.type === "plan") {
+            if (first) { grid.innerHTML = ""; first = false; }
+            $("agent-plan").innerHTML =
+              `<span class="plan-label">DISPATCHED:</span> ` +
+              ev.plan.map((a) => {
+                const col = AGENT_COLORS[a.name] || "var(--cyan)";
+                return `<span class="plan-chip" style="color:${col};border-color:${col}" title="${esc(a.role)}">${esc(a.name)}</span>`;
+              }).join("") +
+              (ev.online ? "" : ` <span class="agent-mode offline">offline — set a DeepSeek key for AI analysis</span>`);
+            // Pre-create pending cards in dispatch order.
+            grid.innerHTML = ev.plan.map((a) =>
+              agentCardHTML(a.name, a.role, '<span class="cursor">▌</span> analysing…', "")).join("");
+          } else if (ev.type === "agent") {
+            const a = ev.agent;
+            const card = $("agent-" + a.name);
+            const body = esc(a.findings).replace(/\n/g, "<br>");
+            if (card) card.querySelector(".agent-findings").innerHTML = body;
+            if (card && a.mode && a.mode !== "ai") {
+              const nm = card.querySelector(".agent-name");
+              if (nm && !nm.querySelector(".agent-mode"))
+                nm.insertAdjacentHTML("beforeend", ` <span class="agent-mode ${esc(a.mode)}">${esc(a.mode)}</span>`);
+            }
+          } else if (ev.type === "synthesis") {
+            synth.hidden = false;
+            synth.innerHTML = `<div class="synth-label">◈ DIRECTOR'S FUSED BRIEFING</div>` +
+              `<div class="synth-text">${esc(ev.synthesis.text).replace(/\n/g, "<br>")}</div>`;
+          } else if (ev.type === "error") {
+            grid.innerHTML = `<div class="err">harness error: ${esc(ev.error)}</div>`;
+          }
+        }
+      }
+    } catch (e) {
+      grid.innerHTML = `<div class="err">agent mesh failed: ${esc(e.message)}</div>`;
+    } finally {
+      agentBusy = false;
+      $("agent-run").disabled = false;
+    }
+  }
+  $("agent-run").addEventListener("click", () => runAgents());
+  $("agent-query").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") runAgents();
+  });
 
   // ── settings modal (paste API keys) ───────────────────────────────────
   const modal = $("settings-modal");
