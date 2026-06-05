@@ -44,6 +44,7 @@
     <button class="tab" data-view="globe">◉ ORBITAL GLOBE</button>
     <button class="tab" data-view="forecast">⊹ ORACLE · FORECAST</button>
     <button class="tab" data-view="agents">⌬ AGENT MESH</button>
+    <button class="tab" data-view="device">⊟ DEVICE SENSORS</button>
   </nav>
 
   <!-- ── NEWS TICKER ──────────────────────────────────────────────────── -->
@@ -182,6 +183,54 @@
     </div>
   </section>
 
+  <!-- ══ VIEW: DEVICE SENSORS ═════════════════════════════════════════════ -->
+  <section class="view device-view" id="view-device">
+    <div class="device-grid">
+
+      <div class="dev-panel">
+        <div class="panel-head"><span>⊟ DEVICE TELEMETRY</span><span class="panel-meta" id="dev-sync">--</span></div>
+        <div class="rail-box" id="device-telemetry"><div class="loading">reading device sensors…</div></div>
+        <div class="dev-actions"><button id="dev-refresh" class="btn-ghost">⟳ REFRESH</button>
+          <span class="dev-note inline">read-only · synced to the SENTINEL agent</span></div>
+      </div>
+
+      <div class="dev-panel">
+        <div class="panel-head"><span>▦ SCREEN SENSOR</span><span class="panel-meta" id="screen-state">idle</span></div>
+        <div class="rail-box">
+          <video id="screen-video" class="dev-video" autoplay muted playsinline></video>
+          <canvas id="screen-canvas" class="dev-video" hidden></canvas>
+          <div class="dev-actions">
+            <button id="screen-start" class="btn-primary">⊕ CAPTURE SCREEN</button>
+            <button id="screen-snap" class="btn-ghost" disabled>◉ SNAPSHOT</button>
+            <button id="screen-stop" class="btn-ghost" disabled>■ STOP</button>
+          </div>
+          <p class="dev-note">Browser-permissioned screen share of <b>your own</b> display. Frames stay on this device — nothing is uploaded to the server.</p>
+        </div>
+      </div>
+
+      <div class="dev-panel">
+        <div class="panel-head"><span>🎙 VOICE INPUT</span><span class="panel-meta" id="voice-state">idle</span></div>
+        <div class="rail-box">
+          <div class="voice-transcript" id="voice-transcript">Tap LISTEN and speak a tasking…</div>
+          <div class="dev-actions">
+            <button id="voice-start" class="btn-primary">🎤 LISTEN</button>
+            <button id="voice-stop" class="btn-ghost" disabled>■ STOP</button>
+            <button id="voice-task" class="btn-ghost" disabled>→ TASK AGENTS</button>
+            <button id="voice-chat" class="btn-ghost" disabled>→ CONSOLE</button>
+          </div>
+          <p class="dev-note">Uses your browser's speech recognition. The transcript becomes JARVIS input — route it to the agent mesh or the console.</p>
+        </div>
+      </div>
+
+      <div class="dev-panel">
+        <div class="panel-head"><span>⌨ INPUT ACTIVITY</span></div>
+        <div class="rail-box" id="input-meter"><div class="loading">monitoring…</div></div>
+        <p class="dev-note">Local keystroke / pointer rate on this page only (last 60s). Not a keylogger — content is never captured or sent.</p>
+      </div>
+
+    </div>
+  </section>
+
   <!-- ══ SETTINGS MODAL ═══════════════════════════════════════════════════ -->
   <div class="modal" id="settings-modal" hidden>
     <div class="modal-card">
@@ -224,6 +273,7 @@
   </footer>
 
   <script src="{{ url_for('static', filename='js/globe.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/device.js') }}"></script>
   <script src="{{ url_for('static', filename='js/terminal.js') }}"></script>
   <script>
     // Register the service worker at root scope so the whole terminal is

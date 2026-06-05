@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, Dict, Iterator, List
 
-from jarvis import deepseek, gdelt, markets, news, runtime, satellite, signals, surveillance
+from jarvis import deepseek, device, gdelt, markets, news, runtime, satellite, signals, surveillance
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -67,6 +67,35 @@ def _signals_digest() -> str:
     return f"top momentum → {mom} | anomalies: {anom}"
 
 
+def _device_digest() -> str:
+    d = device.get_device()
+    if not d or not any(k in d for k in ("memory", "hardware", "screen")):
+        return "(no device telemetry synced — open the DEVICE panel to grant access)"
+    m, h = d.get("memory", {}), d.get("hardware", {})
+    s, n = d.get("screen", {}), d.get("network", {})
+    p, cap = d.get("power", {}), d.get("capture", {})
+    inp = d.get("input", {})
+    parts = []
+    if h:
+        parts.append(f"{h.get('cores', '?')} cores · {h.get('platform', '?')}")
+    if m:
+        parts.append(f"RAM~{m.get('deviceMemoryGB', '?')}GB · JS heap {m.get('jsHeapMB', '?')}MB · "
+                     f"storage {m.get('storageUsageMB', '?')}/{m.get('storageQuotaMB', '?')}MB")
+    if s:
+        parts.append(f"screen {s.get('width', '?')}x{s.get('height', '?')}@{s.get('pixelRatio', '?')}x")
+    if n:
+        parts.append(f"net {n.get('effectiveType', '?')} {n.get('downlinkMbps', '?')}Mbps "
+                     f"({'online' if n.get('online') else 'offline'})")
+    if p:
+        parts.append(f"battery {p.get('batteryLevel', '?')}{' charging' if p.get('charging') else ''}")
+    if inp:
+        parts.append(f"input {inp.get('keysPerMin', 0)} keys/min, {inp.get('pointerPerMin', 0)} ptr/min")
+    if cap:
+        parts.append(f"screen-share {'ON' if cap.get('screenSharing') else 'off'}, "
+                     f"mic {'ON' if cap.get('micListening') else 'off'}")
+    return "; ".join(parts)
+
+
 TOOLS: Dict[str, Callable[[], str]] = {
     "headlines": lambda: _headlines(),
     "headlines:conflict": lambda: _headlines(["CONFLICT", "POLITICS"]),
@@ -78,6 +107,7 @@ TOOLS: Dict[str, Callable[[], str]] = {
     "surveillance": _surveillance_digest,
     "satellite": _satellite_digest,
     "signals": _signals_digest,
+    "device": _device_digest,
 }
 
 
@@ -160,11 +190,51 @@ AGENTS: List[Agent] = [
           ["signals", "gdelt"],
           ["predict", "forecast", "future", "next", "likely", "expect", "outlook",
            "anticipate", "will"]),
+    Agent("OSINT", "Open-source intelligence generalist",
+          "You are OSINT, a generalist open-source analyst. Give a clear, neutral "
+          "synthesis of the overall situation from the open news picture.",
+          ["headlines", "gdelt"],
+          ["news", "situation", "overview", "summary", "happening", "global",
+           "world", "brief", "what is going on", "current"]),
+    Agent("MEDINT", "Health & biosecurity analyst",
+          "You are MEDINT, a public-health and biosecurity analyst. Assess outbreaks, "
+          "disease spread and health-system stress.",
+          ["headlines:disaster", "gdelt"],
+          ["health", "disease", "outbreak", "virus", "pandemic", "epidemic", "bio",
+           "medical", "vaccine", "hospital"]),
+    Agent("ENERGY", "Energy & supply-chain analyst",
+          "You are ENERGY, an energy, commodities and supply-chain analyst. Assess "
+          "oil/gas/power, critical commodities and logistics disruption.",
+          ["markets", "headlines:markets", "gdelt"],
+          ["energy", "oil", "gas", "power", "supply chain", "commodit", "opec",
+           "pipeline", "shipping", "logistics", "grid", "fuel"]),
+    Agent("CLIMATE", "Climate & environment analyst",
+          "You are CLIMATE, an environment and climate-hazard analyst. Assess "
+          "extreme weather, wildfires, floods, drought and environmental impact.",
+          ["satellite", "surveillance", "headlines:disaster"],
+          ["climate", "environment", "weather", "wildfire", "flood", "drought",
+           "emission", "warming", "heatwave", "hurricane", "cyclone"]),
+    Agent("SENTINEL", "Local device & sensor analyst",
+          "You are SENTINEL, the operator's local device sensor analyst. Report the "
+          "operator's device posture (compute, memory, screen, network, power, "
+          "input/capture state) and flag any local constraints or anomalies.",
+          ["device"],
+          ["device", "screen", "memory", "ram", "cpu", "local", "system", "hardware",
+           "battery", "sensor", "my computer", "my phone", "this machine"]),
+    Agent("REDCELL", "Adversarial red-team analyst",
+          "You are REDCELL, a red-team contrarian. Challenge the consensus: state the "
+          "strongest alternative hypothesis, the biggest blind spot, and the worst "
+          "plausible case the other desks may be underweighting. Be sharp, not "
+          "reflexively negative.",
+          ["signals", "headlines"],
+          ["red team", "redcell", "worst case", "adversary", "challenge", "devil",
+           "contrarian", "blind spot", "what could go wrong", "risk"]),
 ]
 
 AGENTS_BY_NAME = {a.name: a for a in AGENTS}
 # Default desk when a task doesn't clearly map to specialists.
-CORE = ["GEOINT", "ECONINT", "GEOPHYS", "ORACLE"]
+CORE = ["OSINT", "GEOINT", "ECONINT", "GEOPHYS", "ORACLE"]
+MAX_AGENTS = 7  # bound fan-out (latency / token cost) per tasking
 
 
 def route(query: str) -> List[Agent]:
@@ -178,7 +248,8 @@ def route(query: str) -> List[Agent]:
     # The ORACLE rides along on any forward-looking phrasing.
     if "ORACLE" not in names and any(w in q for w in ("predict", "forecast", "future", "next", "will", "likely")):
         selected.append(AGENTS_BY_NAME["ORACLE"])
-    return selected
+        names.add("ORACLE")
+    return selected[:MAX_AGENTS]
 
 
 DIRECTOR_SYSTEM = (

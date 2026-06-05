@@ -29,7 +29,8 @@
 | **⚙ Paste-your-key settings** | A Settings panel to paste your DeepSeek key at runtime — no file editing. Stored server-side, gitignored, never returned to the browser; the AI core flips ONLINE instantly. (Every data feed is free/keyless; only the AI core uses a key.) |
 | **⊹ ORACLE — event prediction** | A forecasting engine that fuses every signal into a quantitative vector, then produces **probabilistic predictions of future events** — each with probability, confidence, time horizon, drivers, and confirm/refute indicators. Heuristic baseline + DeepSeek structured forecasts. |
 | **Maximised data ingestion** | ~24 news feeds (wires, finance, conflict, cyber, space, science, health) pulled **concurrently**, plus **markets** (CoinGecko crypto + Stooq indices/commodities/FX) and **GDELT** global media volume & tone. |
-| **⌬ Agent Mesh** | A multi-agent harness: Director J.A.R.V.I.S. routes a tasking to specialist subagents (**GEOINT, ECONINT, GEOPHYS, CYBER, ORACLE**), each with its own persona and data tools, run **concurrently** over DeepSeek and streamed live (SSE) — then fused into one attributed briefing. |
+| **⌬ Agent Mesh** | A multi-agent harness: Director J.A.R.V.I.S. routes a tasking to **11 specialist subagents** (GEOINT, ECONINT, GEOPHYS, CYBER, ORACLE, OSINT, MEDINT, ENERGY, CLIMATE, SENTINEL, REDCELL), each with its own persona and data tools, run **concurrently** over DeepSeek and streamed live (SSE) — then fused into one attributed briefing. |
+| **⊟ Device Sensors** | Consent-gated access to the operator's **own** device via standard browser APIs: memory/hardware/screen/network/power telemetry, **screen capture** (`getDisplayMedia`, frames stay local), and **voice input** (Web Speech API → JARVIS) plus a local input-activity meter. Telemetry syncs to the **SENTINEL** agent. See [Ethics & scope](#ethics--scope). |
 
 ## Quick start
 
@@ -123,7 +124,8 @@ jarvis/
   gdelt.py              GDELT global media volume + tone signals
   signals.py            quantitative signal vector + momentum + anomalies
   forecast.py           ORACLE — heuristic + DeepSeek event predictions
-  agents.py             multi-agent harness (Director + specialist subagents)
+  agents.py             multi-agent harness (Director + 11 specialist subagents)
+  device.py             device-telemetry store (in-memory, sanitised, local)
   briefing.py           AI briefing synthesis from the live picture
   cache.py              thread-safe TTL cache (stale-on-error)
   fallback.py           SIMULATED sample datasets
@@ -131,6 +133,7 @@ templates/index.html    terminal + globe layout, tabs, settings modal
 static/css/terminal.css Bloomberg-style phosphor UI (+ mobile/PWA responsive)
 static/js/terminal.js   client controller (feeds, console, tabs, settings, webcams)
 static/js/globe.js      dependency-free 3D orbital intelligence globe
+static/js/device.js     local device sensors (telemetry, screen, voice, input)
 static/js/sw.js         service worker (offline shell, network-first API)
 static/manifest.webmanifest  PWA manifest (icons, shortcuts)
 static/icons/*.png      generated app icons (any + maskable)
@@ -154,6 +157,7 @@ tests/test_jarvis.py    network-free unit + API + PWA tests
 | `GET` | `/api/signals` | unified quantitative signal vector + anomalies |
 | `GET` | `/api/forecast` | **ORACLE** — probabilistic predictions of future events |
 | `POST` | `/api/agents` · `/api/agents/stream` | **Agent Mesh** — multi-agent taskforce (JSON / SSE) |
+| `GET`/`POST` | `/api/device` | device telemetry store (read / report from own browser) |
 | `GET` | `/api/briefing` | AI situational briefing |
 | `POST` | `/api/chat` · `/api/chat/stream` | JARVIS reply (JSON / SSE) |
 
@@ -191,6 +195,12 @@ A small but real multi-agent system (`agents.py`) layered over DeepSeek:
   | GEOPHYS | disasters & earth systems | seismic, satellite events, disaster news |
   | CYBER | cyber & tech threats | cyber/tech/space headlines |
   | ORACLE | forecasting | signal momentum + GDELT |
+  | OSINT | open-source generalist | all headlines, GDELT |
+  | MEDINT | health & biosecurity | health/disaster headlines, GDELT |
+  | ENERGY | energy & supply chains | markets, market headlines, GDELT |
+  | CLIMATE | climate & environment | satellite, surveillance, disaster news |
+  | SENTINEL | local device & sensors | device telemetry |
+  | REDCELL | adversarial red-team | signals, headlines |
 - **Director** — `run_taskforce(query)` **routes** the tasking to the relevant
   desks (keyword routing + a core-desk fallback), runs them **concurrently**,
   then **synthesises** their reports into one briefing with attribution
@@ -207,7 +217,7 @@ Use the **⌬ AGENT MESH** tab, or type `AGENTS <tasking>` in the console
 
 ```bash
 . .venv/bin/activate && pip install pytest
-python -m pytest -q          # 39 passing, no network required
+python -m pytest -q          # 43 passing, no network required
 ```
 
 ## Ethics & scope
@@ -226,3 +236,10 @@ covert collection tool.
 - The only optional key is **DeepSeek** (the AI core); it is stored server-side
   only (`.jarvis_secrets.json`, chmod 600, gitignored) and never sent back to
   the browser.
+- **Device Sensors** touch only the operator's **own** device, through standard
+  permission-gated browser APIs, and only when the operator chooses to. Screen
+  capture and microphone use the browser's own consent prompts; **screen frames
+  and audio never leave the device** — only non-sensitive telemetry (hardware
+  specs, screen geometry, network class, battery, input-rate counters) is sent
+  to the local server for the SENTINEL agent. The input meter counts event
+  *rates* only — it is not a keylogger and never captures or transmits content.

@@ -396,6 +396,20 @@ body { display: flex; flex-direction: column; }
 .agent-mode.error { color: var(--red); border-color: var(--red); }
 .agent-findings { color: var(--text); font-size: 12px; line-height: 1.45; margin-top: 6px; white-space: pre-wrap; word-break: break-word; }
 
+/* ── DEVICE SENSORS VIEW ───────────────────────────────────────────────── */
+.device-view { padding: 6px; overflow-y: auto; }
+.device-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 6px; align-content: start; width: 100%; }
+.dev-panel { background: var(--panel); border: 1px solid var(--grid-line); display: flex; flex-direction: column; }
+.dev-panel .rail-box { border-bottom: none; }
+.dev-sec { color: var(--cyan); font-size: 9px; letter-spacing: 2px; margin: 8px 0 3px; border-bottom: 1px solid var(--grid-line); padding-bottom: 2px; }
+.dev-sec:first-child { margin-top: 0; }
+.dev-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 10px; }
+.dev-actions .btn-primary, .dev-actions .btn-ghost { font-size: 10px; padding: 5px 10px; }
+.dev-note { color: var(--text-dim); font-size: 9.5px; line-height: 1.4; padding: 0 10px 8px; }
+.dev-note.inline { padding: 0; }
+.dev-video { width: 100%; aspect-ratio: 16 / 9; background: #000; border: 1px solid var(--grid-line); display: block; }
+.voice-transcript { min-height: 60px; background: var(--bg); border: 1px solid var(--grid-line); padding: 8px 10px; color: var(--amber); font-size: 13px; line-height: 1.5; }
+
 /* ── TABLET ────────────────────────────────────────────────────────────── */
 @media (max-width: 1100px) {
   .grid { grid-template-columns: 1fr 1fr; grid-auto-rows: minmax(240px, 40vh); overflow-y: auto; }
@@ -451,6 +465,9 @@ body { display: flex; flex-direction: column; }
   /* Agent mesh: single column, larger input. */
   .agents-grid { grid-template-columns: 1fr; }
   #agent-query { font-size: 16px; }
+
+  /* Device sensors: single column. */
+  .device-grid { grid-template-columns: 1fr; }
 }
 
 /* Standalone (installed PWA) — reclaim the browser chrome space. */

@@ -192,6 +192,7 @@
     "  BRIEF           generate an AI situational briefing",
     "  FORECAST        run the ORACLE — predict future events",
     "  AGENTS <task>   deploy the multi-agent mesh on a tasking",
+    "  DEVICE          local device sensors (memory/screen/voice input)",
     "  REFRESH         reload all feeds",
     "  CLEAR           clear this console",
     "  <anything else> talk to J.A.R.V.I.S. (DeepSeek)",
@@ -273,6 +274,9 @@
         addLine("sys", "Engaging ORACLE — switching to forecast view…");
         showView("forecast");
         setTimeout(runForecast, 200); return;
+      case "DEVICE": case "SENSORS":
+        addLine("sys", "Opening local device sensors…");
+        showView("device"); return;
       default:
         // AGENTS <task> / TASKFORCE <task> → deploy the multi-agent mesh.
         if (cmd === "AGENTS" || cmd === "TASKFORCE" ||
@@ -343,6 +347,7 @@
     if (name === "agents" && !window.matchMedia("(pointer: coarse)").matches) {
       setTimeout(() => $("agent-query").focus(), 50);
     }
+    if (name === "device" && window.JarvisDevice) JarvisDevice.init();
   }
   $("tabs").addEventListener("click", (e) => {
     const t = e.target.closest(".tab");

@@ -11,7 +11,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from jarvis import (  # noqa: E402
-    agents, deepseek, fallback, forecast, news, runtime, signals, surveillance, webcams,
+    agents, deepseek, device, fallback, forecast, news, runtime, signals, surveillance, webcams,
 )
 from jarvis.cache import TTLCache  # noqa: E402
 import app as app_module  # noqa: E402
@@ -356,6 +356,50 @@ def test_agents_endpoint(client, monkeypatch):
             "synthesis": {"text": "ok", "mode": "offline"}, "online": False})
     d = client.post("/api/agents", json={"query": "test"}).get_json()
     assert d["plan"] == ["GEOINT"] and d["agents"][0]["name"] == "GEOINT"
+
+
+# ── Device telemetry (memory / screen / input) ─────────────────────────────
+def test_device_store_sanitises_and_roundtrips():
+    device.reset()
+    stored = device.set_device({
+        "memory": {"deviceMemoryGB": 8, "jsHeapMB": 42, "evil": "rm -rf"},
+        "hardware": {"cores": 12, "ua": "x" * 500},
+        "screen": {"width": 1920, "height": 1080},
+        "capture": {"screenSharing": True, "micListening": False},
+        "secret_section": {"password": "hunter2"},   # must be dropped
+    })
+    assert "secret_section" not in stored
+    assert "evil" not in stored["memory"]              # unknown key dropped
+    assert len(stored["hardware"]["ua"]) <= 160        # value capped
+    got = device.get_device()
+    assert got["memory"]["deviceMemoryGB"] == 8 and got["screen"]["width"] == 1920
+    assert got["capture"]["screenSharing"] is True
+
+
+def test_device_endpoints(client):
+    device.reset()
+    r = client.post("/api/device", json={"hardware": {"cores": 4}})
+    assert r.status_code == 200 and r.get_json()["ok"] is True
+    got = client.get("/api/device").get_json()
+    assert got["hardware"]["cores"] == 4
+
+
+def test_sentinel_agent_reads_device_telemetry():
+    device.reset()
+    assert "no device telemetry" in agents.TOOLS["device"]()  # empty case
+    device.set_device({"hardware": {"cores": 16, "platform": "Linux"},
+                       "screen": {"width": 2560, "height": 1440}})
+    digest = agents.TOOLS["device"]()
+    assert "16 cores" in digest and "2560x1440" in digest
+
+
+def test_expanded_agent_roster_and_routing():
+    names = set(agents.AGENTS_BY_NAME)
+    assert {"OSINT", "MEDINT", "ENERGY", "CLIMATE", "SENTINEL", "REDCELL"} <= names
+    assert len(agents.AGENTS) >= 11
+    # Device wording routes to SENTINEL; routing is capped.
+    assert "SENTINEL" in [a.name for a in agents.route("check my device memory and screen")]
+    assert len(agents.route("health energy climate cyber market conflict device weather")) <= agents.MAX_AGENTS
 
 
 def test_forecast_endpoint(client, monkeypatch):

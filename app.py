@@ -23,6 +23,7 @@ from jarvis import (
     agents,
     briefing,
     deepseek,
+    device,
     forecast,
     gdelt,
     markets,
@@ -109,6 +110,19 @@ def api_signals():
 def api_forecast():
     # The ORACLE: quantitative signals + heuristic + DeepSeek predictions.
     return jsonify(forecast.generate_forecast())
+
+
+@app.route("/api/device", methods=["GET"])
+def api_get_device():
+    return jsonify(device.get_device())
+
+
+@app.route("/api/device", methods=["POST"])
+def api_set_device():
+    # The operator's own browser reports non-sensitive device telemetry here so
+    # the SENTINEL agent can read it. Screen/audio are never sent (see device.py).
+    body = request.get_json(silent=True) or {}
+    return jsonify({"ok": True, "stored": device.set_device(body)})
 
 
 @app.route("/api/agents", methods=["POST"])
