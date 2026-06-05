@@ -106,7 +106,8 @@
   <!-- ══ VIEW: ORBITAL GLOBE ══════════════════════════════════════════════ -->
   <section class="view globe-view" id="view-globe">
     <div class="globe-wrap">
-      <canvas id="globe"></canvas>
+      <div id="globe-map"></div>
+      <canvas id="globe" hidden></canvas>
       <div class="globe-hud">
         <div class="globe-hud-title">◉ ORBITAL INTELLIGENCE</div>
         <div class="globe-coords" id="globe-coords">initialising…</div>
@@ -118,7 +119,7 @@
         <label><input type="checkbox" data-layer="webcam" checked><span class="lc-webcam">WEBCAMS</span></label>
         <label><input type="checkbox" data-layer="news" checked><span class="lc-news">NEWS</span></label>
       </div>
-      <div class="globe-hint">drag to rotate · scroll / pinch to zoom · tap a marker for intel</div>
+      <div class="globe-hint" id="globe-hint">drag to pan · scroll / pinch to zoom · tap a marker for intel</div>
     </div>
 
     <aside class="globe-rail">

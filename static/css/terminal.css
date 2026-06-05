@@ -230,7 +230,14 @@ body { display: flex; flex-direction: column; }
   background: radial-gradient(circle at 50% 40%, #0a1424, #04070c 80%);
   border: 1px solid var(--grid-line); overflow: hidden;
 }
+#globe-map { position: absolute; inset: 0; }
 #globe { position: absolute; inset: 0; display: block; cursor: grab; touch-action: none; }
+.globe-hud, .globe-hint { z-index: 5; }
+.globe-layers { z-index: 5; }
+.maplibregl-ctrl-attrib { font-size: 9px; }
+.maplibregl-ctrl-attrib, .maplibregl-ctrl-attrib a { color: #444 !important; }
+.maplibregl-popup-content { background: var(--amber); padding: 4px 8px; border-radius: 2px; }
+.maplibregl-popup-tip { border-top-color: var(--amber) !important; border-bottom-color: var(--amber) !important; }
 #globe:active { cursor: grabbing; }
 .globe-hud { position: absolute; top: 10px; left: 12px; pointer-events: none; }
 .globe-hud-title { color: var(--cyan); letter-spacing: 2px; font-size: 12px; font-weight: 600; }

@@ -7,7 +7,7 @@
      • API calls (/api/*)             → network-first, fall back to last
                                          cached response when offline.
    ═══════════════════════════════════════════════════════════════════════ */
-const VERSION = "jarvis-v8";
+const VERSION = "jarvis-v9";
 const SHELL = `${VERSION}-shell`;
 const DATA = `${VERSION}-data`;
 
@@ -45,8 +45,12 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
 
-  // Never cache the streaming endpoint.
-  if (url.pathname.startsWith("/api/chat")) return;
+  // Only manage same-origin requests. Cross-origin (map tiles, MapLibre/Tesseract
+  // CDNs, fonts) must bypass the worker entirely.
+  if (url.origin !== self.location.origin) return;
+
+  // Never cache the streaming endpoints.
+  if (url.pathname.startsWith("/api/chat") || url.pathname.startsWith("/api/agents/stream")) return;
 
   // API: network-first with cache fallback.
   if (url.pathname.startsWith("/api/")) {

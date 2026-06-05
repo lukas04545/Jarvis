@@ -1,421 +1,301 @@
 /* ═══════════════════════════════════════════════════════════════════════
    J.A.R.V.I.S. — Orbital Intelligence Globe
-   A self-contained, dependency-free 3D globe (canvas 2D orthographic
-   projection). Plots live intelligence — seismic, orbital, satellite events,
-   public webcams, news — as markers you can rotate into view and zoom on.
-
-   Coastlines are fetched from a public CDN when online; if unreachable, the
-   globe falls back to a graticule wireframe so it always renders.
+   Primary: a photographic Earth on MapLibre GL (satellite raster tiles in
+   GLOBE projection) with Google-Maps-style deep zoom. Intelligence markers
+   (seismic, ISS, satellite events, public webcams, news) plot on top.
+   Fallback: a dependency-free canvas wireframe globe when MapLibre or the tile
+   CDN is unreachable (e.g. an offline / no-egress network).
    ═══════════════════════════════════════════════════════════════════════ */
 window.JarvisGlobe = (() => {
   "use strict";
-
   const DEG = Math.PI / 180;
+
+  // Keyless satellite imagery (Esri World Imagery, deep zoom to z19).
+  const SAT_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+  const SAT_ATTR = "Imagery © Esri, Maxar, Earthstar Geographics";
+  const ML_JS = "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js";
+  const ML_CSS = "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css";
   const COASTLINE_URLS = [
     "https://cdn.jsdelivr.net/gh/martynafford/natural-earth-geojson@master/110m/physical/ne_110m_land.json",
-    "https://raw.githubusercontent.com/martynafford/natural-earth-geojson/master/110m/physical/ne_110m_land.json",
   ];
 
   const REGION_CENTROIDS = {
     Global: [10, 0], MENA: [26, 45], Europe: [50, 10],
     Asia: [34, 100], Americas: [15, -90], Africa: [2, 20],
   };
-
   const SAT_COLORS = {
     FIRE: "#ff5a1b", VOLCANO: "#ff3b3b", STORM: "#38e1ff", ICE: "#dff6ff",
     ICEBERG: "#bfe9ff", FLOOD: "#5db6ff", DUST: "#caa86a", EVENT: "#ff9e1b",
   };
+  const TYPES = ["seismic", "orbital", "satellite", "webcam", "news"];
+  function colorForLevel(l) {
+    return { CRITICAL: "#ff4d4d", SEVERE: "#ff5db1", ELEVATED: "#ff9e1b" }[l] || "#3ddc84";
+  }
 
-  let cv, ctx, dpr = 1;
-  let W = 0, H = 0, cx = 0, cy = 0, baseR = 0;
-  const rot = { lat: 18, lon: -20 };
-  let zoom = 1;
-  let autospin = true;
-  let running = false;
-  let rafId = null;
-
-  let coastlines = null;      // array of rings: [[lon,lat], ...]
-  let markers = [];           // {type, lat, lon, color, r, label, level, data}
-  let rendered = [];          // {x,y,r,marker} for hit-testing
-  let selectedId = null;
+  let mode = null;            // 'map' | 'canvas'
   let onSelect = () => {};
+  let cacheData = null;
+  let points = [];
   const webcamsById = {};
+  const api = {
+    layers: { seismic: true, orbital: true, satellite: true, webcam: true, news: true },
+    initialised: false,
+  };
 
-  // ── projection ───────────────────────────────────────────────────────
-  function project(latDeg, lonDeg) {
-    const lat = latDeg * DEG, lon = lonDeg * DEG;
-    const lat0 = rot.lat * DEG, lon0 = rot.lon * DEG;
-    const dl = lon - lon0;
-    const cosc = Math.sin(lat0) * Math.sin(lat) +
-                 Math.cos(lat0) * Math.cos(lat) * Math.cos(dl);
-    const R = baseR * zoom;
-    const x = R * Math.cos(lat) * Math.sin(dl);
-    const y = R * (Math.cos(lat0) * Math.sin(lat) -
-                   Math.sin(lat0) * Math.cos(lat) * Math.cos(dl));
-    return { x: cx + x, y: cy - y, visible: cosc > 0 };
-  }
-
-  // ── drawing ──────────────────────────────────────────────────────────
-  function drawSphere() {
-    const R = baseR * zoom;
-    // Ocean disk with off-centre radial shading → 3D relief.
-    const g = ctx.createRadialGradient(
-      cx - R * 0.35, cy - R * 0.4, R * 0.1, cx, cy, R);
-    g.addColorStop(0, "#10243a");
-    g.addColorStop(0.55, "#0a1626");
-    g.addColorStop(1, "#04080e");
-    ctx.beginPath();
-    ctx.arc(cx, cy, R, 0, Math.PI * 2);
-    ctx.fillStyle = g;
-    ctx.fill();
-    // Atmosphere glow.
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(cx, cy, R + 1, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(56,225,255,0.35)";
-    ctx.lineWidth = 2;
-    ctx.shadowColor = "rgba(56,225,255,0.5)";
-    ctx.shadowBlur = 18;
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawGraticule() {
-    ctx.strokeStyle = "rgba(56,225,255,0.10)";
-    ctx.lineWidth = 1;
-    // Meridians
-    for (let lon = -180; lon < 180; lon += 30) {
-      ctx.beginPath();
-      let started = false;
-      for (let lat = -90; lat <= 90; lat += 3) {
-        const p = project(lat, lon);
-        if (!p.visible) { started = false; continue; }
-        if (!started) { ctx.moveTo(p.x, p.y); started = true; }
-        else ctx.lineTo(p.x, p.y);
-      }
-      ctx.stroke();
-    }
-    // Parallels
-    for (let lat = -60; lat <= 60; lat += 30) {
-      ctx.beginPath();
-      let started = false;
-      for (let lon = -180; lon <= 180; lon += 3) {
-        const p = project(lat, lon);
-        if (!p.visible) { started = false; continue; }
-        if (!started) { ctx.moveTo(p.x, p.y); started = true; }
-        else ctx.lineTo(p.x, p.y);
-      }
-      ctx.stroke();
-    }
-  }
-
-  function drawCoastlines() {
-    if (!coastlines) return;
-    ctx.strokeStyle = "rgba(61,220,132,0.55)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (const ring of coastlines) {
-      let started = false;
-      for (let i = 0; i < ring.length; i++) {
-        const p = project(ring[i][1], ring[i][0]);
-        if (!p.visible) { started = false; continue; }
-        if (!started) { ctx.moveTo(p.x, p.y); started = true; }
-        else ctx.lineTo(p.x, p.y);
-      }
-    }
-    ctx.stroke();
-  }
-
-  function drawMarkers(t) {
-    rendered = [];
-    for (const m of markers) {
-      const p = project(m.lat, m.lon);
-      if (!p.visible) continue;
-      const pulse = m.pulse ? 0.5 + 0.5 * Math.sin(t / 300) : 1;
-      const r = m.r;
-      // glow halo
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, r + 4 * pulse, 0, Math.PI * 2);
-      ctx.fillStyle = m.color + "33";
-      ctx.fill();
-      // core
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = m.color;
-      ctx.fill();
-      if (m.type === "orbital") {
-        // ISS — draw a small ring to distinguish the satellite.
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, r + 5, 0, Math.PI * 2);
-        ctx.strokeStyle = m.color;
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-      if (m.id === selectedId) {
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, r + 7, 0, Math.PI * 2);
-        ctx.strokeStyle = "#fff";
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-        ctx.fillStyle = "#e8f4ff";
-        ctx.font = "11px 'IBM Plex Mono', monospace";
-        ctx.fillText(m.label || "", p.x + r + 6, p.y - r);
-      }
-      rendered.push({ x: p.x, y: p.y, r: Math.max(r, 8), marker: m });
-    }
-  }
-
-  function frame(t) {
-    if (!running) return;
-    if (autospin) rot.lon = (rot.lon + 0.06) % 360;
-    ctx.clearRect(0, 0, W, H);
-    drawSphere();
-    drawGraticule();
-    drawCoastlines();
-    drawMarkers(t);
-    updateHud();
-    rafId = requestAnimationFrame(frame);
-  }
-
-  function updateHud() {
-    const el = document.getElementById("globe-coords");
-    if (el) {
-      el.textContent =
-        `LAT ${rot.lat.toFixed(1)}  LON ${(((rot.lon + 540) % 360) - 180).toFixed(1)}  ` +
-        `ZOOM ${zoom.toFixed(1)}x  MARKERS ${markers.length}`;
-    }
-  }
-
-  // ── data ─────────────────────────────────────────────────────────────
-  function colorForLevel(level) {
-    return { CRITICAL: "#ff4d4d", SEVERE: "#ff5db1", ELEVATED: "#ff9e1b" }[level] || "#3ddc84";
-  }
-
-  function buildMarkers(surv, cams, sat, newsData) {
+  // ── shared data ───────────────────────────────────────────────────────
+  function buildPoints(c) {
     const out = [];
-    const layers = JarvisGlobe.layers;
-
-    if (layers.seismic && surv && surv.seismic && surv.seismic.events) {
-      for (const q of surv.seismic.events) {
+    if (!c) return out;
+    const s = c.surv || {};
+    if (s.seismic && s.seismic.events) {
+      for (const q of s.seismic.events) {
         if (q.lat == null || q.lon == null) continue;
-        out.push({
-          id: "q-" + (q.place || Math.random()), type: "seismic",
-          lat: q.lat, lon: q.lon, color: colorForLevel(q.level),
-          r: 3 + Math.min(q.mag, 8), pulse: q.level === "CRITICAL" || q.level === "SEVERE",
-          label: `M${q.mag} ${q.place}`, level: q.level, data: q,
-        });
+        out.push({ id: "q-" + (q.place || Math.random()), type: "seismic", lat: q.lat, lon: q.lon,
+          color: colorForLevel(q.level), r: 4 + Math.min(q.mag || 0, 8),
+          label: `M${q.mag} ${q.place}`, data: q });
       }
     }
-    if (layers.orbital && surv && surv.orbital && surv.orbital.lat != null) {
-      const o = surv.orbital;
-      out.push({
-        id: "iss", type: "orbital", lat: o.lat, lon: o.lon, color: "#38e1ff",
-        r: 5, pulse: true, label: `ISS · ${o.alt_km}km`, data: o,
-      });
+    if (s.orbital && s.orbital.lat != null) {
+      out.push({ id: "iss", type: "orbital", lat: s.orbital.lat, lon: s.orbital.lon,
+        color: "#38e1ff", r: 6, label: `ISS · ${s.orbital.alt_km}km`, data: s.orbital });
     }
-    if (layers.satellite && sat && sat.events && sat.events.events) {
+    const sat = c.sat || {};
+    if (sat.events && sat.events.events) {
       for (const e of sat.events.events) {
         if (e.lat == null || e.lon == null) continue;
-        out.push({
-          id: "s-" + e.id, type: "satellite", lat: e.lat, lon: e.lon,
-          color: SAT_COLORS[e.tag] || SAT_COLORS.EVENT, r: 4, pulse: true,
-          label: `${e.tag} · ${e.title}`, data: e,
-        });
+        out.push({ id: "s-" + e.id, type: "satellite", lat: e.lat, lon: e.lon,
+          color: SAT_COLORS[e.tag] || SAT_COLORS.EVENT, r: 5, label: `${e.tag} · ${e.title}`, data: e });
       }
     }
-    if (layers.webcam && cams && cams.webcams) {
-      for (const c of cams.webcams) {
-        if (c.lat == null || c.lon == null) continue;
-        webcamsById[c.id] = c;
-        out.push({
-          id: "w-" + c.id, type: "webcam", lat: c.lat, lon: c.lon,
-          color: "#3ddc84", r: 4, label: `◉ ${c.title}`, data: c,
-        });
-      }
+    const cams = c.cams || {};
+    for (const cam of (cams.webcams || [])) {
+      if (cam.lat == null || cam.lon == null) continue;
+      webcamsById[cam.id] = cam;
+      out.push({ id: "w-" + cam.id, type: "webcam", lat: cam.lat, lon: cam.lon,
+        color: "#3ddc84", r: 5, label: `◉ ${cam.title}`, data: cam });
     }
-    if (layers.news && newsData && newsData.regions) {
-      for (const [region, count] of Object.entries(newsData.regions)) {
-        const c = REGION_CENTROIDS[region];
-        if (!c) continue;
-        out.push({
-          id: "n-" + region, type: "news", lat: c[0], lon: c[1], color: "#ff9e1b",
-          r: 4 + Math.min(count, 10) * 0.6, label: `${region}: ${count} items`,
-          data: { region, count },
-        });
-      }
+    const nd = c.newsData || {};
+    for (const [region, count] of Object.entries(nd.regions || {})) {
+      const ctr = REGION_CENTROIDS[region];
+      if (!ctr) continue;
+      out.push({ id: "n-" + region, type: "news", lat: ctr[0], lon: ctr[1], color: "#ff9e1b",
+        r: 5 + Math.min(count, 10) * 0.7, label: `${region}: ${count} items`, data: { region, count } });
     }
     return out;
   }
 
-  async function fetchJSON(url) {
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(url);
-    return r.json();
-  }
-
-  async function reloadData() {
+  async function fetchJSON(u) { const r = await fetch(u); if (!r.ok) throw new Error(u); return r.json(); }
+  async function fetchAll() {
     const [surv, cams, sat, newsData] = await Promise.all([
       fetchJSON("/api/surveillance").catch(() => null),
       fetchJSON("/api/webcams").catch(() => null),
       fetchJSON("/api/satellite").catch(() => null),
       fetchJSON("/api/news").catch(() => null),
     ]);
-    JarvisGlobe._cache = { surv, cams, sat, newsData };
-    markers = buildMarkers(surv, cams, sat, newsData);
-    return { surv, cams, sat, newsData };
+    cacheData = { surv, cams, sat, newsData };
+    points = buildPoints(cacheData);
+    return cacheData;
   }
 
-  function rebuild() {
-    const c = JarvisGlobe._cache;
-    if (c) markers = buildMarkers(c.surv, c.cams, c.sat, c.newsData);
-  }
+  // ═══ MAPLIBRE PATH ═══════════════════════════════════════════════════
+  let map = null, mapReady = false;
 
-  async function loadCoastlines() {
-    for (const url of COASTLINE_URLS) {
-      try {
-        const ctrl = new AbortController();
-        const to = setTimeout(() => ctrl.abort(), 6000);
-        const r = await fetch(url, { signal: ctrl.signal });
-        clearTimeout(to);
-        if (!r.ok) continue;
-        const gj = await r.json();
-        coastlines = extractRings(gj);
-        return;
-      } catch (e) { /* try next / fall back to graticule */ }
-    }
-  }
-
-  function extractRings(gj) {
-    const rings = [];
-    const feats = gj.features || (gj.type === "Feature" ? [gj] : []);
-    for (const f of feats) {
-      const g = f.geometry;
-      if (!g) continue;
-      if (g.type === "Polygon") g.coordinates.forEach((r) => rings.push(r));
-      else if (g.type === "MultiPolygon")
-        g.coordinates.forEach((poly) => poly.forEach((r) => rings.push(r)));
-      else if (g.type === "LineString") rings.push(g.coordinates);
-      else if (g.type === "MultiLineString") g.coordinates.forEach((r) => rings.push(r));
-    }
-    return rings;
-  }
-
-  // ── interaction ──────────────────────────────────────────────────────
-  function bindEvents() {
-    let dragging = false, lastX = 0, lastY = 0, moved = 0;
-    let pinchDist = 0;
-
-    const down = (x, y) => { dragging = true; lastX = x; lastY = y; moved = 0; autospin = false; };
-    const move = (x, y) => {
-      if (!dragging) return;
-      const dx = x - lastX, dy = y - lastY;
-      moved += Math.abs(dx) + Math.abs(dy);
-      rot.lon = (rot.lon - dx * 0.3 / zoom) % 360;
-      rot.lat = Math.max(-89, Math.min(89, rot.lat + dy * 0.3 / zoom));
-      lastX = x; lastY = y;
-    };
-    const up = (x, y) => {
-      dragging = false;
-      if (moved < 5) hitTest(x, y);
-      setTimeout(() => { autospin = true; }, 4000);
-    };
-
-    cv.addEventListener("mousedown", (e) => down(e.offsetX, e.offsetY));
-    window.addEventListener("mousemove", (e) => {
-      if (dragging) move(e.clientX - cv.getBoundingClientRect().left,
-                          e.clientY - cv.getBoundingClientRect().top);
+  function loadMapLibre() {
+    if (window.maplibregl) return Promise.resolve(true);
+    return new Promise((res) => {
+      const link = document.createElement("link");
+      link.rel = "stylesheet"; link.href = ML_CSS; document.head.appendChild(link);
+      const s = document.createElement("script");
+      s.src = ML_JS;
+      s.onload = () => res(true);
+      s.onerror = () => res(false);
+      document.head.appendChild(s);
     });
-    window.addEventListener("mouseup", (e) => {
-      if (dragging) up(e.clientX - cv.getBoundingClientRect().left,
-                       e.clientY - cv.getBoundingClientRect().top);
-    });
-    cv.addEventListener("wheel", (e) => {
-      e.preventDefault();
-      zoom = Math.max(0.7, Math.min(6, zoom * (e.deltaY < 0 ? 1.12 : 0.89)));
-    }, { passive: false });
+  }
 
-    // Touch
-    cv.addEventListener("touchstart", (e) => {
-      const rect = cv.getBoundingClientRect();
-      if (e.touches.length === 1)
-        down(e.touches[0].clientX - rect.left, e.touches[0].clientY - rect.top);
-      else if (e.touches.length === 2)
-        pinchDist = Math.hypot(
-          e.touches[0].clientX - e.touches[1].clientX,
-          e.touches[0].clientY - e.touches[1].clientY);
-    }, { passive: true });
-    cv.addEventListener("touchmove", (e) => {
-      const rect = cv.getBoundingClientRect();
-      if (e.touches.length === 1)
-        move(e.touches[0].clientX - rect.left, e.touches[0].clientY - rect.top);
-      else if (e.touches.length === 2) {
-        const d = Math.hypot(
-          e.touches[0].clientX - e.touches[1].clientX,
-          e.touches[0].clientY - e.touches[1].clientY);
-        if (pinchDist) zoom = Math.max(0.7, Math.min(6, zoom * (d / pinchDist)));
-        pinchDist = d;
-        e.preventDefault();
+  function geojson() {
+    return {
+      type: "FeatureCollection",
+      features: points.map((p) => ({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [p.lon, p.lat] },
+        properties: { type: p.type, color: p.color, label: p.label, id: p.id,
+          r: p.r, data: JSON.stringify(p.data) },
+      })),
+    };
+  }
+
+  function initMap() {
+    map = new maplibregl.Map({
+      container: "globe-map",
+      style: {
+        version: 8,
+        glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+        sources: { sat: { type: "raster", tiles: [SAT_TILES], tileSize: 256, maxzoom: 19, attribution: SAT_ATTR } },
+        layers: [{ id: "sat", type: "raster", source: "sat" }],
+      },
+      center: [0, 20], zoom: 1.4, minZoom: 0.5, maxZoom: 19,
+      attributionControl: { compact: true },
+    });
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-right");
+    map.on("load", () => {
+      try { map.setProjection({ type: "globe" }); } catch (e) { /* mercator fallback */ }
+      map.addSource("intel", { type: "geojson", data: geojson() });
+      for (const t of TYPES) {
+        map.addLayer({
+          id: "intel-" + t, type: "circle", source: "intel",
+          filter: ["==", ["get", "type"], t],
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, ["*", 0.8, ["coalesce", ["get", "r"], 5]], 8, ["*", 1.8, ["coalesce", ["get", "r"], 5]]],
+            "circle-color": ["get", "color"], "circle-opacity": 0.9,
+            "circle-stroke-width": 1.2, "circle-stroke-color": "rgba(0,0,0,0.6)",
+          },
+        });
+        map.on("click", "intel-" + t, onMapClick);
+        map.on("mouseenter", "intel-" + t, () => { map.getCanvas().style.cursor = "pointer"; });
+        map.on("mouseleave", "intel-" + t, () => { map.getCanvas().style.cursor = ""; });
       }
-    }, { passive: false });
-    cv.addEventListener("touchend", (e) => {
-      const rect = cv.getBoundingClientRect();
-      const t = e.changedTouches[0];
-      if (t) up(t.clientX - rect.left, t.clientY - rect.top);
-      pinchDist = 0;
+      mapReady = true;
+      applyLayerVisibility();
     });
+    map.on("move", updateHudMap);
+    mode = "map";
+    setHint("drag to pan · scroll / pinch to zoom deep · tap a marker for intel");
   }
 
-  function hitTest(x, y) {
-    let best = null, bestD = 16;
-    for (const r of rendered) {
-      const d = Math.hypot(r.x - x, r.y - y);
-      if (d < Math.max(bestD, r.r)) { best = r.marker; bestD = d; }
+  function onMapClick(e) {
+    const f = e.features && e.features[0];
+    if (!f) return;
+    let data = {}; try { data = JSON.parse(f.properties.data); } catch (x) { /* */ }
+    const m = { type: f.properties.type, id: f.properties.id, label: f.properties.label, data };
+    onSelect(m, m.type === "webcam" ? data : null);
+    new maplibregl.Popup({ closeButton: false, offset: 10 })
+      .setLngLat(e.lngLat).setHTML(`<div style="font:11px monospace;color:#0a0d12">${(f.properties.label || "").replace(/[<>]/g, "")}</div>`)
+      .addTo(map);
+  }
+
+  function applyLayerVisibility() {
+    if (!mapReady) return;
+    for (const t of TYPES) {
+      if (map.getLayer("intel-" + t))
+        map.setLayoutProperty("intel-" + t, "visibility", api.layers[t] ? "visible" : "none");
     }
-    if (best) {
-      selectedId = best.id;
-      onSelect(best, best.type === "webcam" ? webcamsById[best.data.id] : null);
+  }
+  function setMapData() { if (mapReady && map.getSource("intel")) map.getSource("intel").setData(geojson()); }
+  function updateHudMap() {
+    const c = map.getCenter();
+    setCoords(`LAT ${c.lat.toFixed(3)}  LON ${c.lng.toFixed(3)}  Z ${map.getZoom().toFixed(1)}  · satellite`);
+  }
+
+  // ═══ CANVAS FALLBACK PATH ════════════════════════════════════════════
+  let cv, ctx, dpr = 1, W = 0, H = 0, cx = 0, cy = 0, baseR = 0;
+  const rot = { lat: 18, lon: -20 };
+  let zoom = 1, autospin = true, running = false, raf = null, coastlines = null;
+  let rendered = [], selectedId = null;
+
+  function project(latDeg, lonDeg) {
+    const lat = latDeg * DEG, lon = lonDeg * DEG, lat0 = rot.lat * DEG, lon0 = rot.lon * DEG, dl = lon - lon0;
+    const cosc = Math.sin(lat0) * Math.sin(lat) + Math.cos(lat0) * Math.cos(lat) * Math.cos(dl);
+    const R = baseR * zoom;
+    return { x: cx + R * Math.cos(lat) * Math.sin(dl),
+      y: cy - R * (Math.cos(lat0) * Math.sin(lat) - Math.sin(lat0) * Math.cos(lat) * Math.cos(dl)),
+      visible: cosc > 0 };
+  }
+  function strokePath(coords, lonLat) {
+    ctx.beginPath(); let started = false;
+    for (const c of coords) {
+      const p = lonLat ? project(c[1], c[0]) : project(c[0], c[1]);
+      if (!p.visible) { started = false; continue; }
+      if (!started) { ctx.moveTo(p.x, p.y); started = true; } else ctx.lineTo(p.x, p.y);
     }
+    ctx.stroke();
+  }
+  function drawCanvas(t) {
+    ctx.clearRect(0, 0, W, H);
+    const R = baseR * zoom;
+    const g = ctx.createRadialGradient(cx - R * 0.35, cy - R * 0.4, R * 0.1, cx, cy, R);
+    g.addColorStop(0, "#10243a"); g.addColorStop(0.55, "#0a1626"); g.addColorStop(1, "#04080e");
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
+    ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R + 1, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(56,225,255,0.35)"; ctx.lineWidth = 2; ctx.shadowColor = "rgba(56,225,255,0.5)"; ctx.shadowBlur = 18; ctx.stroke(); ctx.restore();
+    ctx.strokeStyle = "rgba(56,225,255,0.10)"; ctx.lineWidth = 1;
+    for (let lon = -180; lon < 180; lon += 30) { const pts = []; for (let lat = -90; lat <= 90; lat += 3) pts.push([lon, lat]); strokePath(pts, true); }
+    for (let lat = -60; lat <= 60; lat += 30) { const pts = []; for (let lon = -180; lon <= 180; lon += 3) pts.push([lon, lat]); strokePath(pts, true); }
+    if (coastlines) { ctx.strokeStyle = "rgba(61,220,132,0.55)"; for (const ring of coastlines) strokePath(ring, true); }
+    rendered = [];
+    for (const m of points) {
+      if (!api.layers[m.type]) continue;
+      const p = project(m.lat, m.lon); if (!p.visible) continue;
+      const pulse = 0.6 + 0.4 * Math.sin(t / 300);
+      ctx.beginPath(); ctx.arc(p.x, p.y, m.r + 4 * pulse, 0, Math.PI * 2); ctx.fillStyle = m.color + "33"; ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x, p.y, m.r, 0, Math.PI * 2); ctx.fillStyle = m.color; ctx.fill();
+      if (m.id === selectedId) { ctx.beginPath(); ctx.arc(p.x, p.y, m.r + 7, 0, Math.PI * 2); ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.stroke(); }
+      rendered.push({ x: p.x, y: p.y, r: Math.max(m.r, 8), m });
+    }
+    setCoords(`LAT ${rot.lat.toFixed(1)}  LON ${(((rot.lon + 540) % 360) - 180).toFixed(1)}  ZOOM ${zoom.toFixed(1)}x · wireframe (offline)`);
+  }
+  function frame(t) { if (!running || mode !== "canvas") return; if (autospin) rot.lon = (rot.lon + 0.06) % 360; drawCanvas(t); raf = requestAnimationFrame(frame); }
+
+  function bindCanvas() {
+    let drag = false, lx = 0, ly = 0, moved = 0, pinch = 0;
+    const down = (x, y) => { drag = true; lx = x; ly = y; moved = 0; autospin = false; };
+    const move = (x, y) => { if (!drag) return; const dx = x - lx, dy = y - ly; moved += Math.abs(dx) + Math.abs(dy);
+      rot.lon = (rot.lon - dx * 0.3 / zoom) % 360; rot.lat = Math.max(-89, Math.min(89, rot.lat + dy * 0.3 / zoom)); lx = x; ly = y; };
+    const up = (x, y) => { drag = false; if (moved < 5) hit(x, y); setTimeout(() => { autospin = true; }, 4000); };
+    const rel = (e) => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+    cv.addEventListener("mousedown", (e) => down(...rel(e)));
+    window.addEventListener("mousemove", (e) => { if (drag && cv) move(...rel(e)); });
+    window.addEventListener("mouseup", (e) => { if (drag && cv) up(...rel(e)); });
+    cv.addEventListener("wheel", (e) => { e.preventDefault(); zoom = Math.max(0.7, Math.min(6, zoom * (e.deltaY < 0 ? 1.12 : 0.89))); }, { passive: false });
+    cv.addEventListener("touchstart", (e) => { const r = cv.getBoundingClientRect();
+      if (e.touches.length === 1) down(e.touches[0].clientX - r.left, e.touches[0].clientY - r.top);
+      else if (e.touches.length === 2) pinch = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); }, { passive: true });
+    cv.addEventListener("touchmove", (e) => { const r = cv.getBoundingClientRect();
+      if (e.touches.length === 1) move(e.touches[0].clientX - r.left, e.touches[0].clientY - r.top);
+      else if (e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); if (pinch) zoom = Math.max(0.7, Math.min(6, zoom * (d / pinch))); pinch = d; e.preventDefault(); } }, { passive: false });
+    cv.addEventListener("touchend", (e) => { const t = e.changedTouches[0]; const r = cv.getBoundingClientRect(); if (t) up(t.clientX - r.left, t.clientY - r.top); pinch = 0; });
+  }
+  function hit(x, y) { let best = null, bd = 16; for (const o of rendered) { const d = Math.hypot(o.x - x, o.y - y); if (d < Math.max(bd, o.r)) { best = o.m; bd = d; } }
+    if (best) { selectedId = best.id; onSelect(best, best.type === "webcam" ? webcamsById[best.data.id] : null); } }
+  function resizeCanvas() { const r = cv.parentElement.getBoundingClientRect(); dpr = window.devicePixelRatio || 1; W = r.width; H = r.height;
+    cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + "px"; cv.style.height = H + "px"; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); cx = W / 2; cy = H / 2; baseR = Math.min(W, H) * 0.42; }
+  async function loadCoastlines() { for (const u of COASTLINE_URLS) { try { const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 6000);
+    const r = await fetch(u, { signal: ctrl.signal }); clearTimeout(to); if (!r.ok) continue; coastlines = extractRings(await r.json()); return; } catch (e) { /* */ } } }
+  function extractRings(gj) { const rings = []; for (const f of (gj.features || [])) { const g = f.geometry; if (!g) continue;
+    if (g.type === "Polygon") g.coordinates.forEach((r) => rings.push(r));
+    else if (g.type === "MultiPolygon") g.coordinates.forEach((p) => p.forEach((r) => rings.push(r))); } return rings; }
+  function initCanvas() {
+    cv = document.getElementById("globe"); cv.hidden = false;
+    document.getElementById("globe-map").style.display = "none";
+    ctx = cv.getContext("2d"); resizeCanvas(); bindCanvas(); window.addEventListener("resize", resizeCanvas);
+    loadCoastlines(); mode = "canvas";
+    setHint("drag to rotate · scroll / pinch to zoom · tap a marker (offline globe — connect for satellite Earth)");
   }
 
-  // ── sizing ───────────────────────────────────────────────────────────
-  function resize() {
-    if (!cv) return;
-    const rect = cv.parentElement.getBoundingClientRect();
-    dpr = window.devicePixelRatio || 1;
-    W = rect.width; H = rect.height;
-    cv.width = W * dpr; cv.height = H * dpr;
-    cv.style.width = W + "px"; cv.style.height = H + "px";
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    cx = W / 2; cy = H / 2;
-    baseR = Math.min(W, H) * 0.42;
-  }
+  // ── small helpers ─────────────────────────────────────────────────────
+  function setCoords(t) { const el = document.getElementById("globe-coords"); if (el) el.textContent = t; }
+  function setHint(t) { const el = document.getElementById("globe-hint"); if (el) el.textContent = t; }
 
-  // ── public API ───────────────────────────────────────────────────────
-  return {
-    layers: { seismic: true, orbital: true, satellite: true, webcam: true, news: true },
-    _cache: null,
-    initialised: false,
-
-    init(canvasId, selectCb) {
-      cv = document.getElementById(canvasId);
-      if (!cv) return;
-      ctx = cv.getContext("2d");
-      onSelect = selectCb || (() => {});
-      resize();
-      bindEvents();
-      window.addEventListener("resize", resize);
-      this.initialised = true;
-      loadCoastlines();
-      reloadData();
-    },
-    show() {
-      if (!this.initialised) return;
-      resize();
-      if (!running) { running = true; rafId = requestAnimationFrame(frame); }
-    },
-    hide() { running = false; if (rafId) cancelAnimationFrame(rafId); },
-    reload: reloadData,
-    setLayer(name, on) { this.layers[name] = on; rebuild(); },
-    select(id) { selectedId = id; },
+  // ── public API ────────────────────────────────────────────────────────
+  api.init = async function (canvasId, selectCb) {
+    onSelect = selectCb || (() => {});
+    api.initialised = true;
+    await fetchAll();
+    const ok = await loadMapLibre();
+    if (ok && window.maplibregl) { try { initMap(); } catch (e) { initCanvas(); } }
+    else { initCanvas(); }
   };
+  api.show = function () {
+    if (mode === "map" && map) setTimeout(() => map.resize(), 50);
+    else if (mode === "canvas" && !running) { running = true; resizeCanvas(); raf = requestAnimationFrame(frame); }
+  };
+  api.hide = function () { if (mode === "canvas") { running = false; if (raf) cancelAnimationFrame(raf); } };
+  api.reload = async function () { await fetchAll(); if (mode === "map") setMapData(); };
+  api.setLayer = function (name, on) { api.layers[name] = on; if (mode === "map") applyLayerVisibility(); };
+  api.select = function (id) {
+    selectedId = id;
+    if (mode === "map" && map) { const p = points.find((x) => x.id === id); if (p) map.flyTo({ center: [p.lon, p.lat], zoom: Math.max(map.getZoom(), 6) }); }
+  };
+  api._cache = null;
+  return api;
 })();

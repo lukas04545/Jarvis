@@ -23,7 +23,7 @@
 | **Global surveillance** | Live OSINT sensor grid — **USGS** seismic activity, **ISS** orbital position, **NOAA** space-weather alerts — rolled into a single threat *posture* (NOMINAL → CRITICAL). |
 | **AI situational briefing** | `BRIEF` / F4 packs the live wire + sensor picture into DeepSeek and returns a BLUF-style intelligence briefing. |
 | **Interactive terminal** | Command line (`HELP`, `NEWS`, `SURV`, `BRIEF`, `REFRESH`, `CLEAR`, or free-text chat), function keys F1–F6, topic filters, scrolling ticker, CRT styling. |
-| **◉ Orbital Globe** | A second tab renders an interactive 3D globe (zero dependencies — canvas orthographic projection). Drag to rotate, scroll/pinch to zoom, and tap any marker for intel. All live layers plot on it: seismic, ISS, satellite events, public webcams, news clusters. |
+| **◉ Orbital Globe** | A photographic Earth on **MapLibre GL** — satellite imagery (keyless Esri World Imagery) in **globe projection** with **Google-Maps-style deep zoom** to street level. Live intelligence layers plot on top: seismic, ISS, satellite events, public webcams, news clusters. Degrades to a zero-dependency canvas wireframe globe when offline. |
 | **🛰 Live satellite data** | Keyless open feeds: **NASA EONET** satellite-detected natural events (wildfires, volcanoes, storms…), **NASA EPIC/DSCOVR** full-disc Earth imagery, and the **CelesTrak** active-satellite catalog count. |
 | **◉ Public webcams** | **Free & keyless.** Live London traffic cameras via the public **TfL JamCams** feed (geolocated, refreshing JPEGs) plus a curated worldwide public list — plotted on the globe and viewable in-terminal. See [Ethics & scope](#ethics--scope). |
 | **⚙ Paste-your-key settings** | A Settings panel to paste your DeepSeek key at runtime — no file editing. Stored server-side, gitignored, never returned to the browser; the AI core flips ONLINE instantly. (Every data feed is free/keyless; only the AI core uses a key.) |
@@ -137,7 +137,7 @@ jarvis/
 templates/index.html    terminal + globe layout, tabs, settings modal
 static/css/terminal.css Bloomberg-style phosphor UI (+ mobile/PWA responsive)
 static/js/terminal.js   client controller (feeds, console, tabs, settings, webcams)
-static/js/globe.js      dependency-free 3D orbital intelligence globe
+static/js/globe.js      MapLibre satellite globe (deep zoom) + canvas fallback
 static/js/brain.js      neural-memory graph (force-directed neuron dots)
 static/js/device.js     local device sensors (telemetry, screen, voice, input)
 static/js/sw.js         service worker (offline shell, network-first API)
