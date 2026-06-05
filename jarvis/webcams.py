@@ -1,20 +1,19 @@
-"""Public webcam directory.
+"""Public webcam directory — free & keyless.
 
 IMPORTANT — scope and ethics
 ============================
-This module surfaces ONLY webcams whose owners have *intentionally published*
-them for public viewing (e.g. tourism, traffic and weather cams listed on the
-Windy Webcams public registry, plus a small curated set of well-known public
-live streams).
+This module surfaces ONLY webcams that are *intentionally public*: official
+government traffic cameras and well-known published live streams. It deliberately
+does **not** scan, probe, or brute-force the internet for "open"/unsecured/private
+cameras, and provides no access to any device its owner has not chosen to make
+public. Accessing someone else's camera without authorisation is unlawful; this
+is an aggregator of public feeds, nothing more.
 
-It deliberately does **not** scan, probe, or brute-force the internet for
-"open"/unsecured/private cameras, and provides no access to any device its
-owner has not chosen to make public. Accessing someone else's camera without
-authorisation is unlawful; this is an aggregator of public feeds, nothing more.
-
-Live data source: the Windy Webcams API (https://api.windy.com/webcams), which
-requires a free API key. Paste one in the terminal's SETTINGS panel to unlock
-live public webcams; without a key, a clearly-labelled curated sample is served.
+Live source: **TfL JamCams** — Transport for London's public traffic cameras,
+exposed via the keyless TfL Unified API (https://api.tfl.gov.uk). Each camera is
+geolocated and serves a regularly-refreshed public JPEG, so cams plot on the
+globe and display live in-terminal. No API key required. A curated set of other
+public live cams worldwide supplements the map.
 """
 from __future__ import annotations
 
@@ -23,13 +22,13 @@ from typing import Dict, List
 import requests
 
 from config import config
-from jarvis import runtime
 from jarvis.cache import cache
 
-WINDY_URL = "https://api.windy.com/webcams/api/v3/webcams"
+TFL_JAMCAM_URL = "https://api.tfl.gov.uk/Place/Type/JamCam"
+TFL_MAX = 60  # cap so the globe isn't swamped by ~900 London cameras
 
-# Curated, openly-public live cams (owner-published). Used when no Windy key is
-# configured so the feature is demonstrable; flagged sample=True and link-only.
+# Curated, openly-public live cams worldwide (link-outs) — gives the globe global
+# spread alongside the live TfL feed.
 CURATED: List[Dict] = [
     {"id": "s-nyc", "title": "Times Square, New York", "lat": 40.7580, "lon": -73.9855,
      "city": "New York", "country": "US", "category": "City",
@@ -40,9 +39,6 @@ CURATED: List[Dict] = [
     {"id": "s-venice", "title": "Grand Canal, Venice", "lat": 45.4408, "lon": 12.3155,
      "city": "Venice", "country": "IT", "category": "Landmark",
      "link": "https://www.skylinewebcams.com/en/webcam/italia/veneto/venezia/canal-grande.html"},
-    {"id": "s-abbey", "title": "Abbey Road Crossing, London", "lat": 51.5320, "lon": -0.1779,
-     "city": "London", "country": "GB", "category": "City",
-     "link": "https://www.abbeyroad.com/crossing"},
     {"id": "s-sydney", "title": "Sydney Harbour", "lat": -33.8568, "lon": 151.2153,
      "city": "Sydney", "country": "AU", "category": "Harbour",
      "link": "https://www.portauthoritynsw.com.au/sydney-harbour/sydney-harbour-webcam/"},
@@ -58,56 +54,60 @@ CURATED: List[Dict] = [
 ]
 
 
-def _fetch_windy(key: str, limit: int = 50) -> List[Dict]:
+def _prop(place: Dict, key: str) -> str | None:
+    for p in place.get("additionalProperties", []) or []:
+        if p.get("key") == key:
+            return p.get("value")
+    return None
+
+
+def _fetch_tfl() -> List[Dict]:
     resp = requests.get(
-        WINDY_URL,
-        headers={"x-windy-api-key": key},
-        params={"limit": limit, "include": "categories,images,location,player", "lang": "en"},
+        TFL_JAMCAM_URL,
         timeout=config.HTTP_TIMEOUT,
+        headers={"User-Agent": "JARVIS-Terminal/1.0"},
     )
     resp.raise_for_status()
     cams: List[Dict] = []
-    for w in resp.json().get("webcams", []):
-        loc = w.get("location", {}) or {}
-        images = w.get("images", {}) or {}
-        current = images.get("current", {}) or {}
-        player = w.get("player", {}) or {}
-        embed = (player.get("day") or {}).get("embed") or (player.get("lifetime") or {}).get("embed")
-        cats = w.get("categories", []) or []
-        cams.append(
-            {
-                "id": str(w.get("webcamId") or w.get("id") or ""),
-                "title": w.get("title", "Public webcam"),
-                "lat": loc.get("latitude"),
-                "lon": loc.get("longitude"),
-                "city": loc.get("city"),
-                "country": loc.get("country"),
-                "category": cats[0]["name"] if cats and isinstance(cats[0], dict) else "General",
-                "image": current.get("preview") or current.get("thumbnail"),
-                "embed": embed,
-                "status": w.get("status", "active"),
-                "public": True,
-            }
-        )
-    # Only cams with usable coordinates can be plotted on the globe.
-    return [c for c in cams if c["lat"] is not None and c["lon"] is not None]
+    for place in resp.json():
+        lat, lon = place.get("lat"), place.get("lon")
+        if lat is None or lon is None:
+            continue
+        if (_prop(place, "available") or "true").lower() == "false":
+            continue
+        image = _prop(place, "imageUrl")
+        if not image:
+            continue
+        cams.append({
+            "id": place.get("id") or place.get("naptanId") or image,
+            "title": place.get("commonName", "London traffic camera"),
+            "lat": lat, "lon": lon,
+            "city": "London", "country": "GB", "category": "Traffic",
+            "image": image,
+            "video": _prop(place, "videoUrl"),
+            "status": "active", "public": True,
+        })
+        if len(cams) >= TFL_MAX:
+            break
+    return cams
 
 
 def get_webcams() -> Dict:
-    """Return the public webcam directory (live via Windy if keyed, else sample)."""
-    key = runtime.windy_key()
-    if key:
-        try:
-            cams = cache.get_or_set(f"webcams:{key[:6]}", config.CACHE_TTL, lambda: _fetch_windy(key))
-            return {"source": "windy", "live": True, "sample": False,
-                    "count": len(cams), "webcams": cams,
-                    "note": "Live public webcams via the Windy Webcams registry (owner-published)."}
-        except Exception as exc:  # fall back to sample, surface the reason
-            return {"source": "windy", "live": False, "sample": True,
-                    "count": len(CURATED), "webcams": CURATED,
-                    "error": str(exc)[:140],
-                    "note": "Windy fetch failed — showing curated public sample."}
-    return {"source": "curated", "live": False, "sample": True,
-            "count": len(CURATED), "webcams": CURATED,
-            "note": "Curated public webcams. Add a free Windy Webcams API key in "
-                    "SETTINGS to load live public webcams worldwide."}
+    """Return the public webcam directory — free keyless TfL live + curated."""
+    try:
+        live = cache.get_or_set("webcams:tfl", config.CACHE_TTL, _fetch_tfl)
+    except Exception as exc:
+        return {"source": "curated", "live": False, "sample": True,
+                "count": len(CURATED), "webcams": CURATED, "error": str(exc)[:140],
+                "note": "Live TfL feed unreachable — showing curated public cams."}
+
+    if not live:
+        return {"source": "curated", "live": False, "sample": True,
+                "count": len(CURATED), "webcams": CURATED,
+                "note": "Curated public webcams (live TfL feed returned none)."}
+
+    webcams = live + CURATED
+    return {"source": "tfl+curated", "live": True, "sample": False,
+            "count": len(webcams), "webcams": webcams,
+            "note": "Live London traffic cameras (TfL, keyless public feed) + "
+                    "curated public cams worldwide."}

@@ -393,24 +393,34 @@
   }
 
   // ── public webcams (directory + viewer) ───────────────────────────────
+  let webcamTimer = null;
+  function closeWebcam() {
+    if (webcamTimer) { clearInterval(webcamTimer); webcamTimer = null; }
+    const v = $("webcam-viewer");
+    v.hidden = true; v.innerHTML = "";
+  }
   function openWebcam(cam) {
     const v = $("webcam-viewer");
+    if (webcamTimer) { clearInterval(webcamTimer); webcamTimer = null; }
     v.hidden = false;
-    if (cam.embed) {
-      v.innerHTML =
-        `<div class="wc-head">◉ ${esc(cam.title)} <button class="wc-close">✕</button></div>` +
-        `<iframe class="wc-frame" src="${esc(cam.embed)}" allow="fullscreen" referrerpolicy="no-referrer"></iframe>`;
-    } else if (cam.image) {
-      v.innerHTML =
-        `<div class="wc-head">◉ ${esc(cam.title)} <button class="wc-close">✕</button></div>` +
-        `<img class="wc-frame" src="${esc(cam.image)}" alt="${esc(cam.title)}" />`;
+    const head = `<div class="wc-head">◉ ${esc(cam.title)} <button class="wc-close">✕</button></div>`;
+    if (cam.image) {
+      // Public refreshing JPEG (e.g. TfL traffic cam). Poll with a cache-buster.
+      const bust = () => esc(cam.image) + (cam.image.includes("?") ? "&" : "?") + "_t=" + Date.now();
+      v.innerHTML = head +
+        `<img class="wc-frame" id="wc-img" src="${bust()}" alt="${esc(cam.title)}" />` +
+        `<div class="news-src">${esc(cam.city || "")} ${esc(cam.country || "")} · live public feed, refreshing…` +
+        (cam.video ? ` · <a href="${esc(cam.video)}" target="_blank" rel="noopener">video ↗</a>` : "") + `</div>`;
+      webcamTimer = setInterval(() => {
+        const img = document.getElementById("wc-img");
+        if (img) img.src = bust(); else closeWebcam();
+      }, 5000);
     } else {
-      v.innerHTML =
-        `<div class="wc-head">◉ ${esc(cam.title)} <button class="wc-close">✕</button></div>` +
+      v.innerHTML = head +
         `<div class="wc-link">This is a publicly-published webcam. Open the live source:<br>` +
         `<a href="${esc(cam.link || "#")}" target="_blank" rel="noopener">${esc(cam.link || "source")} ↗</a></div>`;
     }
-    v.querySelector(".wc-close").addEventListener("click", () => { v.hidden = true; v.innerHTML = ""; });
+    v.querySelector(".wc-close").addEventListener("click", closeWebcam);
   }
 
   let webcamList = [];
@@ -565,33 +575,25 @@
       const s = await getJSON("/api/settings");
       $("ds-state").textContent = stateLabel(s.deepseek);
       $("ds-state").className = "key-state " + (s.deepseek.configured ? "ok" : "off");
-      $("wd-state").textContent = stateLabel(s.windy);
-      $("wd-state").className = "key-state " + (s.windy.configured ? "ok" : "off");
     } catch (e) { /* ignore */ }
     $("ds-key").value = "";
-    $("wd-key").value = "";
     $("settings-msg").textContent = "";
     modal.hidden = false;
   }
   function closeSettings() { modal.hidden = true; }
   async function saveSettings(clear) {
-    const payload = clear
-      ? { deepseek_api_key: "", windy_api_key: "" }
-      : { deepseek_api_key: $("ds-key").value, windy_api_key: $("wd-key").value };
-    // Only send fields the operator actually touched (empty string clears).
+    // Empty string clears; only send the field if the operator touched it.
     const body = {};
-    if (clear || $("ds-key").value) body.deepseek_api_key = payload.deepseek_api_key;
-    if (clear || $("wd-key").value) body.windy_api_key = payload.windy_api_key;
+    if (clear || $("ds-key").value) body.deepseek_api_key = clear ? "" : $("ds-key").value;
     $("settings-msg").textContent = "saving…";
     try {
       await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(clear ? payload : body),
+        body: JSON.stringify(body),
       });
       $("settings-msg").textContent = clear ? "cleared." : "saved.";
       loadStatus();                       // flip AI CORE pill
-      if (globeReady) { loadWebcams(); JarvisGlobe.reload(); }
       setTimeout(openSettings, 300);      // refresh the state labels
     } catch (e) {
       $("settings-msg").textContent = "save failed";

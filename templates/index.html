@@ -170,21 +170,18 @@
         <input id="ds-key" class="key-input" type="password" autocomplete="off"
                placeholder="sk-…  (powers the J.A.R.V.I.S. AI core)" />
 
-        <label class="field-label">Windy Webcams API key <span class="key-state" id="wd-state"></span></label>
-        <input id="wd-key" class="key-input" type="password" autocomplete="off"
-               placeholder="optional — unlocks live public webcams worldwide" />
-
         <div class="modal-actions">
-          <button id="settings-save" class="btn-primary">SAVE KEYS</button>
+          <button id="settings-save" class="btn-primary">SAVE KEY</button>
           <button id="settings-clear" class="btn-ghost">CLEAR</button>
           <span id="settings-msg"></span>
         </div>
         <p class="modal-note">
-          Keys are stored on the server you're connected to
+          The key is stored on the server you're connected to
           (<code>.jarvis_secrets.json</code>, gitignored, chmod 600) and used only
-          to call the respective APIs. Intended for self-hosted / local use — they
-          are never sent back to the browser. Get keys at
-          <code>platform.deepseek.com</code> and <code>api.windy.com</code>.
+          to call DeepSeek. Intended for self-hosted / local use — it is never
+          sent back to the browser. Get a key at <code>platform.deepseek.com</code>.
+          All data feeds (news, surveillance, satellite, markets, webcams) are
+          free and keyless.
         </p>
       </div>
     </div>

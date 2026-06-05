@@ -56,42 +56,30 @@ def deepseek_key() -> str:
         return _overrides.get("deepseek_api_key") or config.DEEPSEEK_API_KEY
 
 
-def windy_key() -> str:
-    with _lock:
-        return _overrides.get("windy_api_key") or os.environ.get("WINDY_WEBCAMS_API_KEY", "")
-
-
 def ai_online() -> bool:
     return bool(deepseek_key())
 
 
-def set_keys(deepseek_api_key: str | None = None, windy_api_key: str | None = None) -> None:
+def set_keys(deepseek_api_key: str | None = None) -> None:
     """Update keys. Pass an empty string to clear one; ``None`` leaves it as-is."""
     with _lock:
-        for field, value in (
-            ("deepseek_api_key", deepseek_api_key),
-            ("windy_api_key", windy_api_key),
-        ):
-            if value is None:
-                continue
-            value = value.strip()
+        if deepseek_api_key is not None:
+            value = deepseek_api_key.strip()
             if value:
-                _overrides[field] = value
+                _overrides["deepseek_api_key"] = value
             else:
-                _overrides.pop(field, None)
+                _overrides.pop("deepseek_api_key", None)
         _persist()
 
 
 def status() -> dict:
     """Non-sensitive view of which providers are configured."""
-    # Read configured-state first (each helper takes _lock), then snapshot which
+    # Read configured-state first (the helper takes _lock), then snapshot which
     # keys came from the UI under a single lock. Never hold _lock across a call
     # that re-acquires it — _lock is non-reentrant.
     ds_configured = bool(deepseek_key())
-    wd_configured = bool(windy_key())
     with _lock:
         ds_from_ui = bool(_overrides.get("deepseek_api_key"))
-        wd_from_ui = bool(_overrides.get("windy_api_key"))
 
     def src(from_ui: bool, env_present: bool) -> str:
         return "ui" if from_ui else ("env" if env_present else "none")
@@ -100,9 +88,5 @@ def status() -> dict:
         "deepseek": {
             "configured": ds_configured,
             "source": src(ds_from_ui, bool(config.DEEPSEEK_API_KEY)),
-        },
-        "windy": {
-            "configured": wd_configured,
-            "source": src(wd_from_ui, bool(os.environ.get("WINDY_WEBCAMS_API_KEY"))),
         },
     }

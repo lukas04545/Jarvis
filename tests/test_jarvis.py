@@ -194,21 +194,37 @@ def test_paste_api_key_brings_ai_core_online(client, monkeypatch):
 
 
 def test_settings_never_leak_key_material(client):
-    client.post("/api/settings", json={"deepseek_api_key": "sk-secret", "windy_api_key": "w-secret"})
+    client.post("/api/settings", json={"deepseek_api_key": "sk-secret"})
     blob = client.get("/api/settings").get_data(as_text=True)
-    assert "sk-secret" not in blob and "w-secret" not in blob
+    assert "sk-secret" not in blob
     providers = client.get("/api/settings").get_json()
     assert providers["deepseek"]["configured"] is True
     assert providers["deepseek"]["source"] == "ui"
 
 
-# ── Public webcams ─────────────────────────────────────────────────────────
-def test_webcams_curated_without_key(client):
+# ── Public webcams (free, keyless) ─────────────────────────────────────────
+def test_webcams_fall_back_to_curated_when_live_unavailable(client, monkeypatch):
+    # Force the live TfL fetch to fail → keyless curated fallback.
+    monkeypatch.setattr(webcams.config, "CACHE_TTL", 0)  # bypass shared cache
+    monkeypatch.setattr(webcams, "_fetch_tfl", lambda: (_ for _ in ()).throw(RuntimeError("blocked")))
     data = client.get("/api/webcams").get_json()
     assert data["source"] == "curated" and data["live"] is False
     assert data["count"] == len(webcams.CURATED)
     # Every entry is geolocatable (needed to plot on the globe).
     assert all(c["lat"] is not None and c["lon"] is not None for c in data["webcams"])
+
+
+def test_webcams_live_tfl_merges_curated(client, monkeypatch):
+    monkeypatch.setattr(webcams.config, "CACHE_TTL", 0)  # bypass shared cache
+    monkeypatch.setattr(webcams, "_fetch_tfl", lambda: [
+        {"id": "JamCams_1", "title": "A40 Cam", "lat": 51.5, "lon": -0.1,
+         "city": "London", "country": "GB", "category": "Traffic",
+         "image": "https://example/cam.jpg", "video": None,
+         "status": "active", "public": True}])
+    data = client.get("/api/webcams").get_json()
+    assert data["live"] is True and data["source"] == "tfl+curated"
+    assert data["count"] == 1 + len(webcams.CURATED)
+    assert data["webcams"][0]["image"].startswith("https://")
 
 
 # ── Live satellite data ────────────────────────────────────────────────────

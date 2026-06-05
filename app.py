@@ -75,10 +75,7 @@ def api_get_settings():
 @app.route("/api/settings", methods=["POST"])
 def api_set_settings():
     body = request.get_json(silent=True) or {}
-    runtime.set_keys(
-        deepseek_api_key=body.get("deepseek_api_key"),
-        windy_api_key=body.get("windy_api_key"),
-    )
+    runtime.set_keys(deepseek_api_key=body.get("deepseek_api_key"))
     return jsonify({"ok": True, "providers": runtime.status()})
 
 

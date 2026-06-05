@@ -25,8 +25,8 @@
 | **Interactive terminal** | Command line (`HELP`, `NEWS`, `SURV`, `BRIEF`, `REFRESH`, `CLEAR`, or free-text chat), function keys F1–F6, topic filters, scrolling ticker, CRT styling. |
 | **◉ Orbital Globe** | A second tab renders an interactive 3D globe (zero dependencies — canvas orthographic projection). Drag to rotate, scroll/pinch to zoom, and tap any marker for intel. All live layers plot on it: seismic, ISS, satellite events, public webcams, news clusters. |
 | **🛰 Live satellite data** | Keyless open feeds: **NASA EONET** satellite-detected natural events (wildfires, volcanoes, storms…), **NASA EPIC/DSCOVR** full-disc Earth imagery, and the **CelesTrak** active-satellite catalog count. |
-| **◉ Public webcams** | Directory of *intentionally public* webcams (Windy Webcams registry + curated list), plotted on the globe and viewable in-terminal. See [Ethics & scope](#ethics--scope). |
-| **⚙ Paste-your-key settings** | A Settings panel to paste your DeepSeek key (and optional Windy key) at runtime — no file editing. Stored server-side, gitignored, never returned to the browser; the AI core flips ONLINE instantly. |
+| **◉ Public webcams** | **Free & keyless.** Live London traffic cameras via the public **TfL JamCams** feed (geolocated, refreshing JPEGs) plus a curated worldwide public list — plotted on the globe and viewable in-terminal. See [Ethics & scope](#ethics--scope). |
+| **⚙ Paste-your-key settings** | A Settings panel to paste your DeepSeek key at runtime — no file editing. Stored server-side, gitignored, never returned to the browser; the AI core flips ONLINE instantly. (Every data feed is free/keyless; only the AI core uses a key.) |
 | **⊹ ORACLE — event prediction** | A forecasting engine that fuses every signal into a quantitative vector, then produces **probabilistic predictions of future events** — each with probability, confidence, time horizon, drivers, and confirm/refute indicators. Heuristic baseline + DeepSeek structured forecasts. |
 | **Maximised data ingestion** | ~24 news feeds (wires, finance, conflict, cyber, space, science, health) pulled **concurrently**, plus **markets** (CoinGecko crypto + Stooq indices/commodities/FX) and **GDELT** global media volume & tone. |
 
@@ -117,7 +117,7 @@ jarvis/
   news.py               RSS aggregation, dedupe, region/topic tagging
   surveillance.py       USGS / ISS / NOAA sensor grid + threat posture
   satellite.py          live open satellite data (NASA EONET/EPIC, CelesTrak)
-  webcams.py            public webcam directory (Windy + curated)
+  webcams.py            public webcam directory (TfL JamCams + curated, keyless)
   markets.py            crypto (CoinGecko) + indices/commodities (Stooq)
   gdelt.py              GDELT global media volume + tone signals
   signals.py            quantitative signal vector + momentum + anomalies
@@ -146,7 +146,7 @@ tests/test_jarvis.py    network-free unit + API + PWA tests
 | `GET` | `/api/news` | aggregated, filterable news stream |
 | `GET` | `/api/surveillance` | seismic + orbital + space-weather picture |
 | `GET` | `/api/satellite` | NASA EONET events + EPIC Earth image + sat catalog |
-| `GET` | `/api/webcams` | public webcam directory (live via Windy key, else curated) |
+| `GET` | `/api/webcams` | public webcam directory (keyless TfL JamCams + curated) |
 | `GET` | `/api/markets` | crypto + indices + commodities + risk gauge |
 | `GET` | `/api/gdelt` | global media coverage volume + tone by theme |
 | `GET` | `/api/signals` | unified quantitative signal vector + anomalies |
@@ -187,12 +187,14 @@ python -m pytest -q          # 32 passing, no network required
 This is a situational-awareness aggregator for **open, public data** — not a
 covert collection tool.
 
-- All surveillance/satellite sources are **public, keyless** feeds (USGS, NOAA,
-  NASA, CelesTrak).
+- All data sources are **public and keyless** (USGS, NOAA, NASA, CelesTrak,
+  CoinGecko, Stooq, GDELT, TfL).
 - The webcam feature surfaces **only webcams their owners have intentionally
-  published** (the Windy Webcams public registry, plus a curated list of
-  well-known public live streams). It deliberately does **not** scan, probe, or
-  access unsecured/private cameras. Accessing a device its owner has not made
-  public is unauthorised and unlawful; this tool provides no such capability.
-- Pasted API keys are stored server-side only (`.jarvis_secrets.json`, chmod
-  600, gitignored) and are never sent back to the browser.
+  published** — official **TfL** (Transport for London) public traffic cameras,
+  plus a curated list of well-known public live streams. It deliberately does
+  **not** scan, probe, or access unsecured/private cameras. Accessing a device
+  its owner has not made public is unauthorised and unlawful; this tool provides
+  no such capability.
+- The only optional key is **DeepSeek** (the AI core); it is stored server-side
+  only (`.jarvis_secrets.json`, chmod 600, gitignored) and never sent back to
+  the browser.
