@@ -13,8 +13,8 @@ window.JarvisGlobe = (() => {
   // Keyless satellite imagery (Esri World Imagery, deep zoom to z19).
   const SAT_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
   const SAT_ATTR = "Imagery © Esri, Maxar, Earthstar Geographics";
-  const ML_JS = "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js";
-  const ML_CSS = "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css";
+  const ML_JS = "https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.js";
+  const ML_CSS = "https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.css";
   const COASTLINE_URLS = [
     "https://cdn.jsdelivr.net/gh/martynafford/natural-earth-geojson@master/110m/physical/ne_110m_land.json",
   ];
@@ -130,9 +130,13 @@ window.JarvisGlobe = (() => {
       container: "globe-map",
       style: {
         version: 8,
+        projection: { type: "globe" },        // 3D globe (MapLibre GL v5+)
         glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
         sources: { sat: { type: "raster", tiles: [SAT_TILES], tileSize: 256, maxzoom: 19, attribution: SAT_ATTR } },
-        layers: [{ id: "sat", type: "raster", source: "sat" }],
+        layers: [
+          { id: "bg", type: "background", paint: { "background-color": "#04060c" } },
+          { id: "sat", type: "raster", source: "sat" },
+        ],
       },
       center: [0, 20], zoom: 1.4, minZoom: 0.5, maxZoom: 19,
       attributionControl: { compact: true },
@@ -278,12 +282,16 @@ window.JarvisGlobe = (() => {
 
   // ── public API ────────────────────────────────────────────────────────
   api.init = async function (canvasId, selectCb) {
+    if (api.initialised) return;
     onSelect = selectCb || (() => {});
     api.initialised = true;
     await fetchAll();
     const ok = await loadMapLibre();
     if (ok && window.maplibregl) { try { initMap(); } catch (e) { initCanvas(); } }
     else { initCanvas(); }
+    // init is async, so the external show() already ran (as a no-op while mode
+    // was null). Start the renderer now that the mode is established.
+    api.show();
   };
   api.show = function () {
     if (mode === "map" && map) setTimeout(() => map.resize(), 50);

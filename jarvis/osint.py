@@ -38,12 +38,29 @@ from jarvis import runtime
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 HIBP_URL = "https://haveibeenpwned.com/api/v3/breachedaccount/{}"
 
-# Sites holehe-style account discovery covers (subset, for the structured view).
+# Sites holehe-style account discovery covers (subset). Each carries the service
+# category and a link, so the RECON panel can show useful info per hit.
 SITES = [
-    "github", "gitlab", "twitter/x", "instagram", "spotify", "adobe", "amazon",
-    "pinterest", "wordpress", "discord", "imgur", "lastpass", "patreon",
-    "tumblr", "venmo", "duolingo", "ebay", "rambler",
+    ("github", "Developer", "https://github.com"),
+    ("gitlab", "Developer", "https://gitlab.com"),
+    ("twitter/x", "Social", "https://x.com"),
+    ("instagram", "Social", "https://instagram.com"),
+    ("pinterest", "Social", "https://pinterest.com"),
+    ("tumblr", "Social", "https://tumblr.com"),
+    ("spotify", "Music", "https://spotify.com"),
+    ("adobe", "Software", "https://adobe.com"),
+    ("amazon", "Shopping", "https://amazon.com"),
+    ("ebay", "Shopping", "https://ebay.com"),
+    ("wordpress", "Publishing", "https://wordpress.com"),
+    ("discord", "Messaging", "https://discord.com"),
+    ("imgur", "Media", "https://imgur.com"),
+    ("lastpass", "Security", "https://lastpass.com"),
+    ("patreon", "Creators", "https://patreon.com"),
+    ("venmo", "Finance", "https://venmo.com"),
+    ("duolingo", "Education", "https://duolingo.com"),
+    ("rambler", "Email", "https://rambler.ru"),
 ]
+_SITE_META = {name: (cat, url) for name, cat, url in SITES}
 
 # Minimal rate limiter (per process) to discourage abuse / mass enumeration.
 _LOCK = threading.Lock()
@@ -66,9 +83,10 @@ def _simulated_accounts(email: str) -> List[Dict]:
     # Deterministic pseudo-result from the address hash so the demo is stable.
     h = hashlib.sha256(email.lower().encode()).digest()
     out = []
-    for i, site in enumerate(SITES):
+    for i, (site, cat, url) in enumerate(SITES):
         exists = bool(h[i % len(h)] & (1 << (i % 8)))
-        out.append({"site": site, "exists": exists, "rateLimit": False})
+        out.append({"site": site, "exists": exists, "rateLimit": False,
+                    "category": cat, "url": url})
     return out
 
 
@@ -136,8 +154,14 @@ def _run_holehe(email: str):
                 return out
 
             raw = trio.run(main)
-            result["data"] = [{"site": r.get("name", "?"), "exists": bool(r.get("exists")),
-                               "rateLimit": bool(r.get("rateLimit"))} for r in raw]
+            mapped = []
+            for r in raw:
+                name = r.get("name", "?")
+                cat, url = _SITE_META.get(name, ("Account", ""))
+                mapped.append({"site": name, "exists": bool(r.get("exists")),
+                               "rateLimit": bool(r.get("rateLimit")),
+                               "category": cat, "url": url})
+            result["data"] = mapped
         except Exception:
             result["data"] = None
 

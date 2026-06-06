@@ -730,8 +730,15 @@
       });
       const d = await r.json();
       if (d.error) { body.innerHTML = `<div class="err">${esc(d.error)}${d.notice ? " — " + esc(d.notice) : ""}</div>`; return; }
-      const accounts = d.accounts.map((a) =>
-        `<div class="rec-acct ${a.exists ? "yes" : "no"}"><span>${a.exists ? "◉" : "○"}</span> ${esc(a.site)}</div>`).join("");
+      // Found accounts first, with category + a link to the service.
+      const sorted = [...d.accounts].sort((a, b) => (b.exists === a.exists) ? 0 : (b.exists ? 1 : -1));
+      const accounts = sorted.map((a) => {
+        const name = a.exists && a.url
+          ? `<a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.site)}</a>` : esc(a.site);
+        const cat = a.category ? `<span class="rec-cat">${esc(a.category)}</span>` : "";
+        const rl = a.rateLimit ? '<span class="rec-cat" style="color:var(--text-dim)">rate-limited</span>' : "";
+        return `<div class="rec-acct ${a.exists ? "yes" : "no"}"><span>${a.exists ? "◉" : "○"}</span> ${name} ${cat} ${rl}</div>`;
+      }).join("");
       const breaches = (d.breaches || []).map((b) =>
         `<div class="rec-breach"><b>${esc(b.name)}</b> <span class="news-src">${esc(b.date)} · ${Number(b.pwnCount).toLocaleString()} accts</span>` +
         `<div class="rec-classes">${(b.dataClasses || []).map((c) => `<span>${esc(c)}</span>`).join("")}</div></div>`).join("") ||

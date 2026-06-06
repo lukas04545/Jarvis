@@ -428,7 +428,9 @@ body { display: flex; flex-direction: column; }
 .rec-cols { display: grid; grid-template-columns: 1fr 1.2fr; gap: 14px; }
 .rec-acct { font-size: 11px; padding: 2px 0; color: var(--text-dim); }
 .rec-acct.yes { color: var(--green); } .rec-acct.yes span { color: var(--green); }
+.rec-acct.yes a { color: var(--green); }
 .rec-acct.no span { color: var(--grid-line); }
+.rec-cat { font-size: 9px; color: var(--cyan); border: 1px solid var(--grid-line); padding: 0 4px; letter-spacing: 1px; }
 .rec-breach { padding: 5px 0; border-bottom: 1px solid #11161f; }
 .rec-breach b { color: var(--red); }
 .rec-classes { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
