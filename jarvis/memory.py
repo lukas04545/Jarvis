@@ -73,22 +73,30 @@ def _prune_locked() -> None:
         _neurons.pop(n["id"], None)
 
 
-def add(text: str, kind: str = "note", tags: List[str] | None = None) -> str | None:
-    """Imprint a memory (neuron). Near-duplicates strengthen the existing one."""
+def add(text: str, kind: str = "note", tags: List[str] | None = None,
+        meta: dict | None = None) -> str | None:
+    """Imprint a memory (neuron). Near-duplicates strengthen the existing one.
+
+    ``meta`` carries optional context (source, region, topic, link, time) shown
+    when the neuron is inspected.
+    """
     text = (text or "").strip()[:500]
     if not text:
         return None
     toks = sorted((set(t.lower() for t in (tags or [])) | _tokens(text)))[:24]
+    clean_meta = {k: str(v)[:200] for k, v in (meta or {}).items() if v}
     with _lock:
         for n in _neurons.values():
             if n["text"].lower() == text.lower():
                 n["activations"] = n.get("activations", 1) + 1
+                if clean_meta and not n.get("meta"):
+                    n["meta"] = clean_meta
                 _save()
                 return n["id"]
         nid = uuid.uuid4().hex[:8]
         _neurons[nid] = {
             "id": nid, "text": text, "kind": kind, "tokens": toks,
-            "created": time.time(), "activations": 1,
+            "created": time.time(), "activations": 1, "meta": clean_meta,
         }
         _prune_locked()
         _save()
@@ -121,7 +129,8 @@ def graph() -> Dict:
     with _lock:
         edges = _edges_locked()
         neurons = [{"id": n["id"], "text": n["text"], "kind": n["kind"],
-                    "activations": n.get("activations", 1), "created": n.get("created", 0)}
+                    "activations": n.get("activations", 1), "created": n.get("created", 0),
+                    "meta": n.get("meta", {})}
                    for n in _neurons.values()]
     deg: Dict[str, int] = {}
     for e in edges:

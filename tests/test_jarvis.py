@@ -38,6 +38,11 @@ def isolate_runtime(tmp_path, monkeypatch):
     monkeypatch.setattr(memory, "_PATH", str(tmp_path / "brain.json"))
     monkeypatch.setattr(memory, "_neurons", {})
     osint._HITS.clear()
+    # Never spawn the background ingest loop or hit the network during tests.
+    monkeypatch.setenv("JARVIS_AUTO_INGEST", "0")
+    monkeypatch.setenv("JARVIS_SCRAPE_ARTICLES", "0")
+    monkeypatch.setattr(ingest, "_STARTED", False)
+    monkeypatch.setattr(ingest, "_THREAD", None)
 
 
 @pytest.fixture
@@ -516,6 +521,30 @@ def test_ingest_offline_stores_headlines_as_neurons(monkeypatch):
     assert memory.stats()["neurons"] == 2
     # stored as 'news' neurons that can be recalled
     assert memory.recall("border clashes", k=1)
+
+
+def test_ingest_neuron_carries_context_not_just_headline(monkeypatch):
+    monkeypatch.setattr(deepseek.config, "DEEPSEEK_API_KEY", "")  # offline → raw path
+    monkeypatch.setattr(ingest.news, "get_news", lambda: {"items": [{
+        "title": "Coup attempt reported in capital",
+        "summary": "Soldiers seized the state broadcaster overnight; the president's whereabouts are unknown.",
+        "source": "Reuters", "region": "Africa", "topic": "POLITICS",
+        "link": "https://example.com/a", "time": "08:12",
+    }]})
+    ingest.ingest_once()
+    g = memory.graph()
+    n = g["neurons"][0]
+    assert "—" in n["text"] and "broadcaster" in n["text"].lower()   # more than headline
+    assert n["meta"]["source"] == "Reuters" and n["meta"]["region"] == "Africa"
+    assert n["meta"]["link"] == "https://example.com/a"
+
+
+def test_ensure_started_respects_env(monkeypatch):
+    monkeypatch.setenv("JARVIS_AUTO_INGEST", "0")
+    monkeypatch.setattr(ingest, "_STARTED", False)
+    monkeypatch.setattr(ingest, "_THREAD", None)
+    ingest.ensure_started()
+    assert ingest._THREAD is None      # did not start
 
 
 def test_ingest_distills_with_deepseek(monkeypatch):

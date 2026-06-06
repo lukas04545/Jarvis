@@ -196,9 +196,16 @@ window.JarvisBrain = (() => {
 
   function showDetail(n) {
     const el = $("brain-detail"); if (!el) return;
+    const m = n.meta || {};
+    let metaHtml = "";
+    if (m.source) metaHtml += `<div class="kv"><span>SOURCE</span><b>${esc(m.source)}</b></div>`;
+    if (m.region || m.topic) metaHtml += `<div class="kv"><span>CONTEXT</span><b>${esc([m.region, m.topic].filter(Boolean).join(" · "))}</b></div>`;
+    if (m.time) metaHtml += `<div class="kv"><span>SEEN</span><b>${esc(m.time)}</b></div>`;
+    if (m.link) metaHtml += `<div class="kv"><span>LINK</span><b><a href="${esc(m.link)}" target="_blank" rel="noopener">open ↗</a></b></div>`;
     el.innerHTML =
       `<div class="vision-head" style="color:${color(n.kind)}">⬡ ${esc(n.kind).toUpperCase()} NEURON</div>` +
       `<div class="brain-mem">${esc(n.text)}</div>` +
+      metaHtml +
       `<div class="news-src">${n.degree || 0} synapses · activated ${n.activations || 1}× · ${new Date((n.created || 0) * 1000).toISOString().slice(0, 16)}Z</div>` +
       `<button class="btn-ghost" id="brain-forget">✕ FORGET</button>`;
     const b = $("brain-forget");

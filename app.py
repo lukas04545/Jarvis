@@ -45,6 +45,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def index():
+    ingest.ensure_started()      # kick off continuous learning on first page load
     return render_template("index.html", version=__version__)
 
 
@@ -315,6 +316,5 @@ if __name__ == "__main__":
     )
     print(banner)
     # Continuous learning: scrape news → distil → connected neurons → forecasts.
-    if os.environ.get("JARVIS_AUTO_INGEST", "1") != "0":
-        ingest.start_background(int(os.environ.get("JARVIS_INGEST_INTERVAL", "600")))
+    ingest.ensure_started()
     app.run(host=config.HOST, port=config.PORT, threaded=True)
