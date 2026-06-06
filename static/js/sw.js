@@ -7,7 +7,7 @@
      • API calls (/api/*)             → network-first, fall back to last
                                          cached response when offline.
    ═══════════════════════════════════════════════════════════════════════ */
-const VERSION = "jarvis-v10";
+const VERSION = "jarvis-v11";
 const SHELL = `${VERSION}-shell`;
 const DATA = `${VERSION}-data`;
 

@@ -1,8 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   J.A.R.V.I.S. — Neural Memory ("the brain")
+   J.A.R.V.I.S. — Neural Memory ("the brain"), 3D
    Persistent memories are NEURONS (dots); shared keywords are SYNAPSES (lines).
-   A lightweight force-directed layout animates the graph on a canvas; clicking
-   a neuron inspects the memory. Self-contained, no dependencies.
+   A 3D force-directed layout runs in space; nodes are projected with
+   perspective (depth → size + fog), the whole network auto-rotates, and you can
+   drag to orbit, scroll to zoom, and click a neuron to inspect it.
+   Self-contained — pure canvas, no dependencies, works offline.
    ═══════════════════════════════════════════════════════════════════════ */
 window.JarvisBrain = (() => {
   "use strict";
@@ -14,12 +16,14 @@ window.JarvisBrain = (() => {
     note: "#38e1ff", taskforce: "#ff9e1b", chat: "#3ddc84",
     osint: "#ff5db1", intel: "#9d7bff", fact: "#7ad6c0",
   };
+  const FOCAL = 900;          // perspective focal length
+  const BOUND = 230;          // containment sphere radius
 
-  let cv, ctx, dpr = 1, W = 0, H = 0;
+  let cv, ctx, dpr = 1, W = 0, H = 0, cx = 0, cy = 0;
   let running = false, raf = null, inited = false;
   let nodes = [], edges = [], byId = {};
-  let selected = null, hover = null;
-  let dragNode = null;
+  let selected = null;
+  let rotX = -0.3, rotY = 0, zoom = 1, autoRotate = true;
 
   function color(kind) { return KIND_COLORS[kind] || "#8aa0b4"; }
 
@@ -27,104 +31,113 @@ window.JarvisBrain = (() => {
   async function load() {
     try {
       const g = await (await fetch("/api/memory")).json();
-      sync(g);
-      renderStats(g);
+      sync(g); renderStats(g);
     } catch (e) { /* ignore */ }
   }
-
   function sync(g) {
     const prev = byId; byId = {};
     nodes = (g.neurons || []).map((n) => {
       const old = prev[n.id];
-      const node = old || { x: W / 2 + (Math.random() - 0.5) * 200, y: H / 2 + (Math.random() - 0.5) * 200, vx: 0, vy: 0 };
+      const node = old || {
+        x: (Math.random() - 0.5) * 240, y: (Math.random() - 0.5) * 240, z: (Math.random() - 0.5) * 240,
+        vx: 0, vy: 0, vz: 0,
+      };
       Object.assign(node, n);
       byId[n.id] = node;
       return node;
     });
     edges = (g.edges || []).filter((e) => byId[e.a] && byId[e.b]);
   }
-
   function renderStats(g) {
     const el = $("brain-stats");
-    if (el) el.textContent = `${g.count} neurons · ${g.synapses} synapses`;
+    if (el) el.textContent = `${g.count} neurons · ${g.synapses} synapses · 3D`;
     const k = $("brain-kinds");
     if (k && g.stats) k.innerHTML = Object.entries(g.stats.kinds || {})
       .map(([kind, n]) => `<span class="kind-chip" style="color:${color(kind)};border-color:${color(kind)}">${esc(kind)} ${n}</span>`).join("");
   }
 
-  // ── physics (force-directed) ──────────────────────────────────────────
+  // ── 3D physics ────────────────────────────────────────────────────────
   function step() {
-    const cx = W / 2, cy = H / 2;
-    for (const n of nodes) {
-      if (n === dragNode) continue;
-      n.vx += (cx - n.x) * 0.0008;      // gentle centering
-      n.vy += (cy - n.y) * 0.0008;
+    for (const n of nodes) {           // centering
+      n.vx += -n.x * 0.0016; n.vy += -n.y * 0.0016; n.vz += -n.z * 0.0016;
     }
-    // repulsion
-    for (let i = 0; i < nodes.length; i++) {
+    for (let i = 0; i < nodes.length; i++) {   // repulsion
+      const a = nodes[i];
       for (let j = i + 1; j < nodes.length; j++) {
-        const a = nodes[i], b = nodes[j];
-        let dx = a.x - b.x, dy = a.y - b.y;
-        let d2 = dx * dx + dy * dy || 0.01;
-        if (d2 > 60000) continue;
-        const f = 900 / d2;
-        const d = Math.sqrt(d2);
-        dx /= d; dy /= d;
-        a.vx += dx * f; a.vy += dy * f;
-        b.vx -= dx * f; b.vy -= dy * f;
+        const b = nodes[j];
+        let dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+        let d2 = dx * dx + dy * dy + dz * dz || 0.01;
+        if (d2 > 90000) continue;
+        const d = Math.sqrt(d2), f = 1600 / d2;
+        dx /= d; dy /= d; dz /= d;
+        a.vx += dx * f; a.vy += dy * f; a.vz += dz * f;
+        b.vx -= dx * f; b.vy -= dy * f; b.vz -= dz * f;
       }
     }
-    // spring along synapses
-    for (const e of edges) {
+    for (const e of edges) {            // synapse springs
       const a = byId[e.a], b = byId[e.b];
-      const dx = b.x - a.x, dy = b.y - a.y;
-      const d = Math.hypot(dx, dy) || 0.01;
-      const target = 70 + (1 - e.w) * 90;
+      let dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+      const d = Math.hypot(dx, dy, dz) || 0.01;
+      const target = 70 + (1 - e.w) * 80;
       const f = (d - target) * 0.01;
-      const ux = dx / d, uy = dy / d;
-      a.vx += ux * f; a.vy += uy * f;
-      b.vx -= ux * f; b.vy -= uy * f;
+      dx /= d; dy /= d; dz /= d;
+      a.vx += dx * f; a.vy += dy * f; a.vz += dz * f;
+      b.vx -= dx * f; b.vy -= dy * f; b.vz -= dz * f;
     }
     for (const n of nodes) {
-      if (n === dragNode) continue;
-      n.vx *= 0.85; n.vy *= 0.85;
-      n.x += Math.max(-6, Math.min(6, n.vx));
-      n.y += Math.max(-6, Math.min(6, n.vy));
-      n.x = Math.max(14, Math.min(W - 14, n.x));
-      n.y = Math.max(14, Math.min(H - 14, n.y));
+      n.vx *= 0.86; n.vy *= 0.86; n.vz *= 0.86;
+      n.x += Math.max(-5, Math.min(5, n.vx));
+      n.y += Math.max(-5, Math.min(5, n.vy));
+      n.z += Math.max(-5, Math.min(5, n.vz));
+      const r = Math.hypot(n.x, n.y, n.z);
+      if (r > BOUND) { const s = BOUND / r; n.x *= s; n.y *= s; n.z *= s; }
     }
   }
 
-  function radius(n) { return 4 + Math.min(8, (n.degree || 0)) * 0.8 + Math.min(4, Math.log2((n.activations || 1) + 1)); }
+  // ── projection ────────────────────────────────────────────────────────
+  function project(n) {
+    const cosy = Math.cos(rotY), siny = Math.sin(rotY);
+    let x = n.x * cosy - n.z * siny;
+    let z = n.x * siny + n.z * cosy;
+    const cosx = Math.cos(rotX), sinx = Math.sin(rotX);
+    let y = n.y * cosx - z * sinx;
+    z = n.y * sinx + z * cosx;
+    const scale = FOCAL / (FOCAL - z) * zoom;
+    n.sx = cx + x * scale; n.sy = cy + y * scale; n.depth = z; n.scale = scale;
+  }
+  function radius(n) { return (3.5 + Math.min(8, (n.degree || 0)) * 0.7 + Math.min(4, Math.log2((n.activations || 1) + 1))) * n.scale; }
+  function fog(z) { return Math.max(0.25, Math.min(1, (z + BOUND) / (2 * BOUND) * 0.85 + 0.3)); }
 
   function draw(t) {
     ctx.clearRect(0, 0, W, H);
+    for (const n of nodes) project(n);
     // synapses
     for (const e of edges) {
       const a = byId[e.a], b = byId[e.b];
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
-      ctx.strokeStyle = `rgba(56,225,255,${0.08 + e.w * 0.35})`;
-      ctx.lineWidth = 0.5 + e.w * 1.5;
+      const al = (0.06 + e.w * 0.4) * fog((a.depth + b.depth) / 2);
+      ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy);
+      ctx.strokeStyle = `rgba(56,225,255,${al.toFixed(3)})`;
+      ctx.lineWidth = (0.4 + e.w * 1.4) * Math.min(a.scale, b.scale);
       ctx.stroke();
     }
-    // neurons
-    for (const n of nodes) {
-      const r = radius(n), col = color(n.kind);
+    // neurons, far→near
+    const order = [...nodes].sort((p, q) => p.depth - q.depth);
+    for (const n of order) {
+      const r = Math.max(1.5, radius(n)), col = color(n.kind), a = fog(n.depth);
       const pulse = 0.6 + 0.4 * Math.sin(t / 600 + n.x * 0.05);
-      ctx.beginPath(); ctx.arc(n.x, n.y, r + 5, 0, Math.PI * 2);
-      ctx.fillStyle = col + "22"; ctx.fill();
-      ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = col; ctx.globalAlpha = pulse; ctx.fill(); ctx.globalAlpha = 1;
-      if (n === selected || n === hover) {
-        ctx.beginPath(); ctx.arc(n.x, n.y, r + 4, 0, Math.PI * 2);
-        ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.globalAlpha = a * 0.25;
+      ctx.beginPath(); ctx.arc(n.sx, n.sy, r + 5 * n.scale, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill();
+      ctx.globalAlpha = a * pulse;
+      ctx.beginPath(); ctx.arc(n.sx, n.sy, r, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill();
+      ctx.globalAlpha = 1;
+      if (n === selected) {
+        ctx.beginPath(); ctx.arc(n.sx, n.sy, r + 4, 0, Math.PI * 2); ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.3; ctx.stroke();
         ctx.fillStyle = "#dfeaf4"; ctx.font = "10px 'IBM Plex Mono', monospace";
-        ctx.fillText((n.text || "").slice(0, 36), n.x + r + 6, n.y + 3);
+        ctx.fillText((n.text || "").slice(0, 40), n.sx + r + 6, n.sy + 3);
       }
     }
     if (!nodes.length) {
-      ctx.fillStyle = "#6b7886"; ctx.font = "12px 'IBM Plex Mono', monospace";
-      ctx.textAlign = "center";
+      ctx.fillStyle = "#6b7886"; ctx.font = "12px 'IBM Plex Mono', monospace"; ctx.textAlign = "center";
       ctx.fillText("brain empty — imprint a memory below or run the agent mesh", W / 2, H / 2);
       ctx.textAlign = "left";
     }
@@ -132,89 +145,81 @@ window.JarvisBrain = (() => {
 
   function frame(t) {
     if (!running) return;
+    if (autoRotate) rotY += 0.0035;
     step(); draw(t);
     raf = requestAnimationFrame(frame);
   }
 
-  // ── interaction ───────────────────────────────────────────────────────
+  // ── interaction (orbit / zoom / select) ───────────────────────────────
+  function rel(e) { const r = cv.getBoundingClientRect(); const p = e.touches ? e.touches[0] : e; return { x: p.clientX - r.left, y: p.clientY - r.top }; }
   function at(x, y) {
-    let best = null, bd = 16;
+    let best = null, bestDepth = -1e9;
     for (const n of nodes) {
-      const d = Math.hypot(n.x - x, n.y - y);
-      if (d < Math.max(bd, radius(n) + 4)) { best = n; bd = d; }
+      const r = Math.max(radius(n), 9);
+      if (Math.hypot(n.sx - x, n.sy - y) < r + 4 && n.depth > bestDepth) { best = n; bestDepth = n.depth; }
     }
     return best;
   }
-  function rel(e) {
-    const r = cv.getBoundingClientRect();
-    const p = e.touches ? e.touches[0] : e;
-    return { x: p.clientX - r.left, y: p.clientY - r.top };
+  let dragging = false, lx = 0, ly = 0, moved = 0, pinch = 0;
+  function down(e) { const { x, y } = rel(e); dragging = true; lx = x; ly = y; moved = 0; autoRotate = false; }
+  function move(e) {
+    if (!dragging) return;
+    const { x, y } = rel(e); const dx = x - lx, dy = y - ly;
+    moved += Math.abs(dx) + Math.abs(dy);
+    rotY += dx * 0.01; rotX = Math.max(-1.45, Math.min(1.45, rotX + dy * 0.01));
+    lx = x; ly = y;
   }
-  function onDown(e) { const { x, y } = rel(e); dragNode = at(x, y); if (dragNode) { selected = dragNode; showDetail(dragNode); } }
-  function onMove(e) {
-    const { x, y } = rel(e);
-    if (dragNode) { dragNode.x = x; dragNode.y = y; dragNode.vx = dragNode.vy = 0; }
-    else hover = at(x, y);
+  function up(e) {
+    dragging = false;
+    if (moved < 5) { const { x, y } = rel(e.changedTouches ? { touches: e.changedTouches } : e); const n = at(x, y); if (n) { selected = n; showDetail(n); } }
+    setTimeout(() => { autoRotate = true; }, 4000);
   }
-  function onUp() { dragNode = null; }
 
   function showDetail(n) {
-    const el = $("brain-detail");
-    if (!el) return;
+    const el = $("brain-detail"); if (!el) return;
     el.innerHTML =
       `<div class="vision-head" style="color:${color(n.kind)}">⬡ ${esc(n.kind).toUpperCase()} NEURON</div>` +
       `<div class="brain-mem">${esc(n.text)}</div>` +
-      `<div class="news-src">${n.degree || 0} synapses · activated ${n.activations || 1}× · ` +
-      `${new Date((n.created || 0) * 1000).toISOString().slice(0, 16)}Z</div>` +
-      `<button class="btn-ghost" id="brain-forget" data-id="${esc(n.id)}">✕ FORGET</button>`;
+      `<div class="news-src">${n.degree || 0} synapses · activated ${n.activations || 1}× · ${new Date((n.created || 0) * 1000).toISOString().slice(0, 16)}Z</div>` +
+      `<button class="btn-ghost" id="brain-forget">✕ FORGET</button>`;
     const b = $("brain-forget");
-    if (b) b.addEventListener("click", async () => {
-      await fetch("/api/memory/" + n.id, { method: "DELETE" });
-      selected = null; el.innerHTML = "Select a neuron to inspect the memory."; load();
-    });
+    if (b) b.addEventListener("click", async () => { await fetch("/api/memory/" + n.id, { method: "DELETE" }); selected = null; el.innerHTML = "Select a neuron to inspect the memory."; load(); });
   }
-
   async function imprint(text) {
-    text = (text || "").trim();
-    if (!text) return;
+    text = (text || "").trim(); if (!text) return;
     await fetch("/api/memory", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, kind: "note" }) });
-    $("brain-input").value = "";
-    load();
+    $("brain-input").value = ""; load();
   }
 
-  // ── sizing / lifecycle ────────────────────────────────────────────────
   function resize() {
     const rect = cv.parentElement.getBoundingClientRect();
-    dpr = window.devicePixelRatio || 1;
-    W = rect.width; H = rect.height;
-    cv.width = W * dpr; cv.height = H * dpr;
-    cv.style.width = W + "px"; cv.style.height = H + "px";
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    dpr = window.devicePixelRatio || 1; W = rect.width; H = rect.height;
+    cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + "px"; cv.style.height = H + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); cx = W / 2; cy = H / 2;
   }
-
   function init() {
-    cv = $("brain-canvas");
-    if (!cv) return;
+    cv = $("brain-canvas"); if (!cv) return;
     if (!inited) {
-      ctx = cv.getContext("2d");
-      resize();
-      window.addEventListener("resize", resize);
-      cv.addEventListener("mousedown", onDown);
-      window.addEventListener("mousemove", (e) => { if (cv) onMove(e); });
-      window.addEventListener("mouseup", onUp);
-      cv.addEventListener("touchstart", onDown, { passive: true });
-      cv.addEventListener("touchmove", (e) => { onMove(e); }, { passive: true });
-      cv.addEventListener("touchend", onUp);
+      ctx = cv.getContext("2d"); resize(); window.addEventListener("resize", resize);
+      cv.addEventListener("mousedown", down);
+      window.addEventListener("mousemove", (e) => { if (dragging) move(e); });
+      window.addEventListener("mouseup", (e) => { if (dragging) up(e); });
+      cv.addEventListener("wheel", (e) => { e.preventDefault(); zoom = Math.max(0.4, Math.min(3.5, zoom * (e.deltaY < 0 ? 1.1 : 0.9))); }, { passive: false });
+      cv.addEventListener("touchstart", (e) => { if (e.touches.length === 2) pinch = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); else down(e); }, { passive: true });
+      cv.addEventListener("touchmove", (e) => {
+        if (e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); if (pinch) zoom = Math.max(0.4, Math.min(3.5, zoom * (d / pinch))); pinch = d; e.preventDefault(); }
+        else move(e);
+      }, { passive: false });
+      cv.addEventListener("touchend", (e) => { pinch = 0; up(e); });
       $("brain-add").addEventListener("click", () => imprint($("brain-input").value));
       $("brain-input").addEventListener("keydown", (e) => { if (e.key === "Enter") imprint(e.target.value); });
       $("brain-refresh").addEventListener("click", load);
       inited = true;
     }
-    resize();
-    load();
+    resize(); load();
     if (!running) { running = true; raf = requestAnimationFrame(frame); }
   }
-  function show() { if (inited) { running = running || (raf = requestAnimationFrame(frame), true); load(); } else init(); }
+  function show() { if (!inited) { init(); return; } resize(); load(); if (!running) { running = true; raf = requestAnimationFrame(frame); } }
   function hide() { running = false; if (raf) cancelAnimationFrame(raf); }
 
   return { init, show, hide, reload: load };
