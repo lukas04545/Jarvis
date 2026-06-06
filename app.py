@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from typing import Iterator
 
 from flask import Flask, Response, jsonify, render_template, request, send_from_directory
@@ -306,6 +307,14 @@ def api_chat_stream():
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# Start continuous learning as soon as the app is imported — so it runs however
+# the server is launched (python app.py, gunicorn, etc.) and even when the PWA
+# service worker serves the page from cache and never hits the index route.
+# Skipped under pytest so the test suite never spawns the loop / touches the net.
+if "pytest" not in sys.modules:
+    ingest.ensure_started()
 
 
 if __name__ == "__main__":

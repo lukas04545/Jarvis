@@ -35,6 +35,7 @@ _STATUS: Dict = {"last_run": None, "runs": 0, "last_count": 0,
                  "processor": "—", "scraped": 0, "neurons": 0}
 _THREAD = None
 _STARTED = False
+_INTERVAL = 300
 _LOCK = threading.Lock()
 
 _UA = "Mozilla/5.0 (compatible; JARVIS-Terminal/1.0; +intelligence)"
@@ -159,11 +160,22 @@ def ingest_once(limit: int = 24) -> Dict:
 
 def get_status() -> Dict:
     with _LOCK:
-        return {**_STATUS, "auto": _THREAD is not None, "neurons": memory.stats()["neurons"]}
+        st = {**_STATUS, "auto": _THREAD is not None, "interval": _INTERVAL,
+              "neurons": memory.stats()["neurons"]}
+    if st.get("last_run"):
+        try:
+            age = (datetime.now(tz=timezone.utc)
+                   - datetime.fromisoformat(st["last_run"])).total_seconds()
+            st["age"] = int(age)
+            st["next_in"] = max(0, int(_INTERVAL - age))
+        except Exception:
+            pass
+    return st
 
 
 def start_background(interval: int = 300) -> None:
-    global _THREAD
+    global _THREAD, _INTERVAL
+    _INTERVAL = max(60, interval)
     with _LOCK:
         if _THREAD is not None:
             return

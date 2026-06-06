@@ -20,7 +20,7 @@ window.JarvisBrain = (() => {
   const BOUND = 230;          // containment sphere radius
 
   let cv, ctx, dpr = 1, W = 0, H = 0, cx = 0, cy = 0;
-  let running = false, raf = null, inited = false;
+  let running = false, raf = null, inited = false, poll = null;
   let nodes = [], edges = [], byId = {};
   let selected = null;
   let rotX = -0.3, rotY = 0, zoom = 1, autoRotate = true;
@@ -39,10 +39,20 @@ window.JarvisBrain = (() => {
     try {
       const s = await (await fetch("/api/ingest")).json();
       const el = document.getElementById("ingest-status");
-      if (el) el.textContent = s.auto
-        ? `auto · ${s.runs} runs · ${s.processor}` : `manual · ${s.processor}`;
+      if (!el) return;
+      if (s.auto) {
+        const bits = [`auto ✓`, `${s.runs} runs`, `${s.neurons} neurons`];
+        if (s.next_in != null) bits.push(`next ${s.next_in}s`);
+        el.textContent = bits.join(" · ");
+        el.style.color = "var(--green)";
+      } else {
+        el.textContent = "OFF — reload page / restart server";
+        el.style.color = "var(--red)";
+      }
     } catch (e) { /* ignore */ }
   }
+  function startPoll() { if (!poll) poll = setInterval(load, 18000); }   // live updates
+  function stopPoll() { if (poll) { clearInterval(poll); poll = null; } }
   async function ingestNow() {
     const btn = document.getElementById("ingest-now");
     if (btn) { btn.disabled = true; btn.textContent = "⟳ scraping & distilling…"; }
@@ -244,11 +254,11 @@ window.JarvisBrain = (() => {
       if (ing) ing.addEventListener("click", ingestNow);
       inited = true;
     }
-    resize(); load();
+    resize(); load(); startPoll();
     if (!running) { running = true; raf = requestAnimationFrame(frame); }
   }
-  function show() { if (!inited) { init(); return; } resize(); load(); if (!running) { running = true; raf = requestAnimationFrame(frame); } }
-  function hide() { running = false; if (raf) cancelAnimationFrame(raf); }
+  function show() { if (!inited) { init(); return; } resize(); load(); startPoll(); if (!running) { running = true; raf = requestAnimationFrame(frame); } }
+  function hide() { running = false; if (raf) cancelAnimationFrame(raf); stopPoll(); }
 
   return { init, show, hide, reload: load };
 })();

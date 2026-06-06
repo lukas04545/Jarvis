@@ -547,6 +547,21 @@ def test_ensure_started_respects_env(monkeypatch):
     assert ingest._THREAD is None      # did not start
 
 
+def test_import_does_not_autostart_under_pytest():
+    # The import-time auto-start must be skipped while testing.
+    assert ingest._THREAD is None
+
+
+def test_ingest_status_exposes_auto_and_interval(client, monkeypatch):
+    monkeypatch.setattr(deepseek.config, "DEEPSEEK_API_KEY", "")
+    monkeypatch.setattr(app_module.ingest.news, "get_news",
+                        lambda: {"items": [{"title": "T", "topic": "TECH", "region": "Global"}]})
+    client.post("/api/ingest")
+    s = client.get("/api/ingest").get_json()
+    assert "auto" in s and "interval" in s and s["interval"] >= 60
+    assert s["age"] >= 0 and "next_in" in s
+
+
 def test_ingest_distills_with_deepseek(monkeypatch):
     monkeypatch.setattr(ingest.runtime, "ai_online", lambda: True)
     monkeypatch.setattr(ingest.news, "get_news", lambda: {"items": [
