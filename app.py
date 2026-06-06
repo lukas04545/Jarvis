@@ -33,6 +33,7 @@ from jarvis import (
     runtime,
     satellite,
     signals,
+    stocks,
     surveillance,
     webcams,
 )
@@ -131,6 +132,18 @@ def api_satellite():
 @app.route("/api/markets")
 def api_markets():
     return jsonify(markets.get_markets())
+
+
+@app.route("/api/stocks")
+def api_stocks_watchlist():
+    return jsonify(stocks.get_watchlist())
+
+
+@app.route("/api/stocks/<ticker>")
+def api_stocks(ticker):
+    horizon = request.args.get("horizon", 20)
+    result = stocks.get_forecast(ticker, horizon)
+    return jsonify(result), (400 if result.get("error") else 200)
 
 
 @app.route("/api/gdelt")

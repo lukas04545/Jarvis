@@ -193,6 +193,7 @@
     "  FORECAST        run the ORACLE — predict future events",
     "  AGENTS <task>   deploy the multi-agent mesh on a tasking",
     "  RECON <email>   email-exposure OSINT (authorised use only)",
+    "  STOCK <ticker>  track + forecast a stock (TimesFM / statistical)",
     "  BRAIN           open the neural memory graph",
     "  REMEMBER <text> imprint a memory · RECALL <q> recall memories",
     "  DEVICE          local device sensors (memory/screen/voice input)",
@@ -283,6 +284,8 @@
       case "BRAIN": case "MEMORY":
         addLine("sys", "Opening neural memory…");
         showView("brain"); return;
+      case "STOCKS": case "STOCK":
+        showView("stocks"); return;
       default: {
         const rest = text.replace(/^\s*\S+\s*/, "").trim();
         // AGENTS <task> / TASKFORCE <task> → deploy the multi-agent mesh.
@@ -290,6 +293,12 @@
           addLine("sys", rest ? "Deploying agent mesh…" : "Opening agent mesh — enter a tasking.");
           showView("agents");
           if (rest) { $("agent-query").value = rest; setTimeout(() => runAgents(rest), 200); }
+          return;
+        }
+        // STOCK <ticker> → price forecast.
+        if (cmd.startsWith("STOCK ") || cmd.startsWith("STOCKS ")) {
+          showView("stocks");
+          if (rest) { $("stock-ticker").value = rest; setTimeout(() => runStock(rest), 200); }
           return;
         }
         // RECON <email> → email-exposure OSINT.
@@ -379,6 +388,10 @@
     if (window.JarvisBrain) (name === "brain" ? JarvisBrain.show() : JarvisBrain.hide());
     if (name === "recon" && !window.matchMedia("(pointer: coarse)").matches) {
       setTimeout(() => $("recon-email").focus(), 50);
+    }
+    if (name === "stocks") {
+      if (!stocksReady) { stocksReady = true; loadWatchlist(); runStock("AAPL"); }
+      else if (lastStock) setTimeout(() => drawStockChart(lastStock), 50);
     }
   }
   $("tabs").addEventListener("click", (e) => {
@@ -756,6 +769,95 @@
   }
   $("recon-run").addEventListener("click", () => runRecon());
   $("recon-email").addEventListener("keydown", (e) => { if (e.key === "Enter" && !$("recon-run").disabled) runRecon(); });
+
+  // ── STOCKS (price tracking + TimesFM forecast) ────────────────────────
+  let stocksReady = false, lastStock = null;
+  async function loadWatchlist() {
+    try {
+      const w = await getJSON("/api/stocks");
+      $("stocks-watch").innerHTML = (w.quotes || []).map((q) => {
+        const cls = q.change_pct >= 0 ? "up" : "down";
+        return `<button class="stock-chip" data-t="${esc(q.ticker)}">${esc(q.ticker)} ` +
+          `<b class="${cls}">${q.change_pct >= 0 ? "+" : ""}${esc(q.change_pct)}%</b></button>`;
+      }).join("");
+    } catch (e) { /* ignore */ }
+  }
+  $("stocks-watch").addEventListener("click", (e) => {
+    const b = e.target.closest(".stock-chip");
+    if (b) { $("stock-ticker").value = b.dataset.t; runStock(b.dataset.t); }
+  });
+
+  function drawStockChart(d) {
+    const cv = $("stock-chart"), wrap = cv.parentElement;
+    const dprL = window.devicePixelRatio || 1;
+    const w = wrap.clientWidth, h = wrap.clientHeight;
+    cv.width = w * dprL; cv.height = h * dprL; cv.style.width = w + "px"; cv.style.height = h + "px";
+    const c = cv.getContext("2d"); c.setTransform(dprL, 0, 0, dprL, 0, 0); c.clearRect(0, 0, w, h);
+    const hist = d.history || [], fc = d.forecast || [];
+    if (!hist.length) return;
+    const pad = 36, padR = 56, total = hist.length + fc.length;
+    let lo = Infinity, hi = -Infinity;
+    for (const p of hist) { lo = Math.min(lo, p.close); hi = Math.max(hi, p.close); }
+    for (const p of fc) { lo = Math.min(lo, p.lo); hi = Math.max(hi, p.hi); }
+    const span = (hi - lo) || 1; lo -= span * 0.08; hi += span * 0.08;
+    const X = (i) => pad + (i / (total - 1)) * (w - pad - padR);
+    const Y = (v) => h - pad - ((v - lo) / (hi - lo)) * (h - 2 * pad);
+    // grid + price axis
+    c.strokeStyle = "rgba(255,255,255,0.06)"; c.fillStyle = "#6b7886"; c.font = "9px 'IBM Plex Mono', monospace";
+    for (let g = 0; g <= 4; g++) { const v = lo + (hi - lo) * g / 4, y = Y(v);
+      c.beginPath(); c.moveTo(pad, y); c.lineTo(w - padR, y); c.stroke();
+      c.fillText(v.toFixed(2), w - padR + 4, y + 3); }
+    // forecast band
+    if (fc.length) {
+      c.beginPath();
+      c.moveTo(X(hist.length - 1), Y(hist[hist.length - 1].close));
+      fc.forEach((p, i) => c.lineTo(X(hist.length + i), Y(p.hi)));
+      for (let i = fc.length - 1; i >= 0; i--) c.lineTo(X(hist.length + i), Y(fc[i].lo));
+      c.closePath(); c.fillStyle = "rgba(56,225,255,0.12)"; c.fill();
+    }
+    // history line
+    c.beginPath(); hist.forEach((p, i) => i ? c.lineTo(X(i), Y(p.close)) : c.moveTo(X(i), Y(p.close)));
+    c.strokeStyle = "#ff9e1b"; c.lineWidth = 1.4; c.stroke();
+    // "now" divider
+    c.beginPath(); c.moveTo(X(hist.length - 1), pad); c.lineTo(X(hist.length - 1), h - pad);
+    c.strokeStyle = "rgba(255,255,255,0.2)"; c.setLineDash([3, 3]); c.lineWidth = 1; c.stroke(); c.setLineDash([]);
+    // forecast line
+    c.beginPath(); c.moveTo(X(hist.length - 1), Y(hist[hist.length - 1].close));
+    fc.forEach((p, i) => c.lineTo(X(hist.length + i), Y(p.yhat)));
+    c.strokeStyle = "#38e1ff"; c.lineWidth = 1.6; c.setLineDash([5, 3]); c.stroke(); c.setLineDash([]);
+  }
+
+  async function runStock(ticker, horizon) {
+    const t = (ticker || $("stock-ticker").value).trim();
+    if (!t) return;
+    const hz = horizon || $("stock-horizon").value;
+    $("stocks-info").innerHTML = '<div class="loading">fetching prices & forecasting…</div>';
+    try {
+      const d = await getJSON(`/api/stocks/${encodeURIComponent(t)}?horizon=${hz}`);
+      if (d.error) { $("stocks-info").innerHTML = `<div class="err">${esc(d.error)}</div>`; return; }
+      lastStock = d;
+      drawStockChart(d);
+      const up = d.predicted_change_pct >= 0;
+      const meth = d.method === "timesfm" ? "TimesFM" : "statistical model";
+      $("stocks-sub").textContent = `${d.ticker} · ${d.symbol} · ${meth}`;
+      $("stocks-info").innerHTML =
+        `<div class="stk-row"><span class="stk-big">${esc(d.last)}</span>` +
+        `<span class="${d.change_pct >= 0 ? "up" : "down"}">${d.change_pct >= 0 ? "▲" : "▼"} ${esc(d.change_pct)}% today</span>` +
+        (d.simulated ? '<span class="agent-mode offline">SIM</span>' : "") + "</div>" +
+        `<div class="stk-grid">` +
+        `<div class="kv"><span>FORECAST (${esc(d.horizon)}d)</span><b class="${up ? "up" : "down"}">${esc(d.predicted)}</b></div>` +
+        `<div class="kv"><span>EXPECTED MOVE</span><b class="${up ? "up" : "down"}">${up ? "+" : ""}${esc(d.predicted_change_pct)}%</b></div>` +
+        `<div class="kv"><span>METHOD</span><b>${esc(meth)}</b></div>` +
+        `<div class="kv"><span>RANGE</span><b>${esc(d.forecast[d.forecast.length - 1].lo)} – ${esc(d.forecast[d.forecast.length - 1].hi)}</b></div>` +
+        `</div><p class="dev-note">Forecasts are model estimates with an ~80% confidence band, not investment advice.</p>`;
+    } catch (e) {
+      $("stocks-info").innerHTML = `<div class="err">forecast failed: ${esc(e.message)}</div>`;
+    }
+  }
+  $("stock-run").addEventListener("click", () => runStock());
+  $("stock-ticker").addEventListener("keydown", (e) => { if (e.key === "Enter") runStock(); });
+  $("stock-horizon").addEventListener("change", () => { if (lastStock) runStock(lastStock.ticker); });
+  window.addEventListener("resize", () => { if (lastStock && $("view-stocks").classList.contains("active")) drawStockChart(lastStock); });
 
   // ── settings modal (paste API keys) ───────────────────────────────────
   const modal = $("settings-modal");

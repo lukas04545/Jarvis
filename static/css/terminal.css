@@ -436,6 +436,25 @@ body { display: flex; flex-direction: column; }
 .rec-classes { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
 .rec-classes span { font-size: 9px; color: var(--amber); border: 1px solid var(--amber-dim); padding: 0 4px; }
 
+/* ── STOCKS VIEW ───────────────────────────────────────────────────────── */
+.stocks-view { padding: 6px; }
+.stocks-main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--panel); border: 1px solid var(--grid-line); overflow: hidden; }
+.stocks-input { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--panel-2); border-bottom: 1px solid var(--grid-line); }
+.stocks-input .prompt { color: var(--cyan); font-weight: 600; }
+#stock-ticker { flex: 1; background: transparent; border: none; outline: none; color: var(--amber); font-family: var(--font); font-size: 14px; text-transform: uppercase; }
+#stock-horizon { background: var(--bg); color: var(--cyan); border: 1px solid var(--grid-line); font-family: var(--font); font-size: 11px; padding: 5px; outline: none; }
+.stocks-watch { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 12px; border-bottom: 1px solid var(--grid-line); }
+.stock-chip { background: transparent; border: 1px solid var(--grid-line); color: var(--text); font-family: var(--font); font-size: 11px; padding: 3px 8px; cursor: pointer; letter-spacing: 1px; }
+.stock-chip:hover { border-color: var(--cyan); }
+.stock-chip .up { color: var(--green); } .stock-chip .down { color: var(--red); }
+.stocks-chartwrap { flex: 1; min-height: 220px; position: relative; }
+#stock-chart { position: absolute; inset: 0; width: 100%; height: 100%; }
+.stocks-info { padding: 10px 12px; border-top: 1px solid var(--grid-line); }
+.stk-row { display: flex; align-items: baseline; gap: 12px; }
+.stk-big { font-size: 26px; font-weight: 600; color: var(--text); }
+.stocks-info .up { color: var(--green); } .stocks-info .down { color: var(--red); }
+.stk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 6px 16px; margin-top: 8px; }
+
 /* ── DEVICE SENSORS VIEW ───────────────────────────────────────────────── */
 .device-view { padding: 6px; overflow-y: auto; }
 .device-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 6px; align-content: start; width: 100%; }
@@ -514,6 +533,10 @@ body { display: flex; flex-direction: column; }
 
   /* Device sensors: single column. */
   .device-grid { grid-template-columns: 1fr; }
+
+  /* Stocks: taller chart on phones. */
+  .stocks-chartwrap { min-height: 50vh; }
+  #stock-ticker { font-size: 16px; }
 
   /* Brain + recon stack on phones. */
   .brain-view { flex-direction: column; overflow-y: auto; }

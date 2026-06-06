@@ -43,6 +43,7 @@
     <button class="tab active" data-view="terminal">▣ TERMINAL</button>
     <button class="tab" data-view="globe">◉ ORBITAL GLOBE</button>
     <button class="tab" data-view="forecast">⊹ ORACLE · FORECAST</button>
+    <button class="tab" data-view="stocks">⊞ STOCKS</button>
     <button class="tab" data-view="agents">⌬ AGENT MESH</button>
     <button class="tab" data-view="brain">✺ BRAIN</button>
     <button class="tab" data-view="recon">⊠ RECON</button>
@@ -161,6 +162,34 @@
       <div class="panel-head"><span>📡 GDELT TONE/VOLUME</span></div>
       <div class="rail-box" id="signal-gdelt"></div>
     </aside>
+  </section>
+
+  <!-- ══ VIEW: STOCKS (TimesFM forecast) ══════════════════════════════════ -->
+  <section class="view stocks-view" id="view-stocks">
+    <div class="stocks-main">
+      <div class="agents-head">
+        <div>
+          <div class="forecast-title">⊞ STOCKS · PRICE FORECAST</div>
+          <div class="forecast-sub" id="stocks-sub">tracking + TimesFM time-series prediction</div>
+        </div>
+      </div>
+      <div class="recon-input">
+        <span class="prompt">TICKER&gt;</span>
+        <input id="stock-ticker" autocomplete="off" spellcheck="false" placeholder="AAPL · MSFT · NVDA · ^SPX · CL.F … (Stooq symbols)" />
+        <select id="stock-horizon" title="forecast horizon (trading days)">
+          <option value="10">10d</option>
+          <option value="20" selected>20d</option>
+          <option value="30">30d</option>
+          <option value="60">60d</option>
+        </select>
+        <button id="stock-run" class="btn-primary">▶ FORECAST</button>
+      </div>
+      <div class="stocks-watch" id="stocks-watch"></div>
+      <div class="stocks-chartwrap"><canvas id="stock-chart"></canvas></div>
+      <div class="stocks-info" id="stocks-info">
+        <div class="loading">Enter a ticker and forecast — historical price (amber) + predicted path with confidence band (cyan).</div>
+      </div>
+    </div>
   </section>
 
   <!-- ══ VIEW: AGENT MESH ═════════════════════════════════════════════════ -->

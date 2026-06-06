@@ -29,6 +29,7 @@
 | **⚙ Paste-your-key settings** | A Settings panel to paste your DeepSeek key at runtime — no file editing. Stored server-side, gitignored, never returned to the browser; the AI core flips ONLINE instantly. (Every data feed is free/keyless; only the AI core uses a key.) |
 | **⊹ ORACLE — event prediction** | A forecasting engine that fuses every signal into a quantitative vector, then produces **probabilistic predictions of future events** — each with probability, confidence, time horizon, drivers, and confirm/refute indicators. Heuristic baseline + DeepSeek structured forecasts. |
 | **Maximised data ingestion** | ~24 news feeds (wires, finance, conflict, cyber, space, science, health) pulled **concurrently**, plus **markets** (CoinGecko crypto + Stooq indices/commodities/FX) and **GDELT** global media volume & tone. |
+| **⊞ Stocks (price forecast)** | Track any ticker (keyless Stooq history) and **predict prices with Google TimesFM** (time-series foundation model) when installed, or a built-in statistical model otherwise. Interactive chart: history + forecast path with an ~80% confidence band, a watchlist, and expected-move stats. |
 | **⌬ Agent Mesh** | A multi-agent harness: Director J.A.R.V.I.S. routes a tasking to **13 specialist subagents** (GEOINT, ECONINT, GEOPHYS, CYBER, ORACLE, OSINT, MEDINT, ENERGY, CLIMATE, SENTINEL, REDCELL, RECON, CORTEX), each with its own persona and data tools, run **concurrently** over DeepSeek and streamed live (SSE) — then fused into one attributed briefing. |
 | **⊟ Device Sensors** | Consent-gated access to the operator's **own** device via standard browser APIs: memory/hardware/screen/network/power telemetry, **screen capture** (`getDisplayMedia`, frames stay local), and **voice input** (Web Speech API → JARVIS) plus a local input-activity meter. Telemetry syncs to the **SENTINEL** agent. See [Ethics & scope](#ethics--scope). |
 | **👁 JARVIS Vision** | Makes JARVIS *see* the shared screen — **on-device** OCR (Tesseract.js) extracts the on-screen text and a pixel-level visual summary (resolution, theme, dominant colour); the image never leaves the device. Press **ASK JARVIS** to send the extracted text to the AI for analysis. Multi-language (EN/DE/ES/FR) for both speech-to-text and OCR. |
@@ -125,6 +126,7 @@ jarvis/
   webcams.py            public webcam directory (TfL JamCams + curated, keyless)
   markets.py            crypto (CoinGecko) + indices/commodities (Stooq)
   gdelt.py              GDELT global media volume + tone signals
+  stocks.py             stock history (Stooq) + TimesFM/statistical forecast
   signals.py            quantitative signal vector + momentum + anomalies
   forecast.py           ORACLE — heuristic + DeepSeek event predictions
   agents.py             multi-agent harness (Director + 13 specialist subagents)
@@ -162,6 +164,7 @@ tests/test_jarvis.py    network-free unit + API + PWA tests
 | `GET` | `/api/gdelt` | global media coverage volume + tone by theme |
 | `GET` | `/api/signals` | unified quantitative signal vector + anomalies |
 | `GET` | `/api/forecast` | **ORACLE** — probabilistic predictions of future events |
+| `GET` | `/api/stocks` · `/api/stocks/<ticker>` | watchlist quotes · price history + forecast |
 | `POST` | `/api/agents` · `/api/agents/stream` | **Agent Mesh** — multi-agent taskforce (JSON / SSE) |
 | `GET`/`POST` | `/api/device` | device telemetry store (read / report from own browser) |
 | `GET`/`POST`/`DELETE` | `/api/memory` | neural memory — graph / imprint / recall / forget |
@@ -227,7 +230,7 @@ Use the **⌬ AGENT MESH** tab, or type `AGENTS <tasking>` in the console
 
 ```bash
 . .venv/bin/activate && pip install pytest
-python -m pytest -q          # 54 passing, no network required
+python -m pytest -q          # 59 passing, no network required
 ```
 
 ## Ethics & scope

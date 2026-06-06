@@ -7,3 +7,8 @@ python-dotenv==1.0.1
 # Runs only when JARVIS_ENABLE_HOLEHE=1; the feature degrades to a simulated
 # footprint when absent, so this can be omitted on constrained installs.
 holehe==1.61
+
+# Optional & HEAVY (JAX/PyTorch + a downloaded checkpoint) — Google TimesFM for
+# the STOCKS price forecaster. Install separately, then set JARVIS_ENABLE_TIMESFM=1:
+#     pip install timesfm[torch]
+# Without it, STOCKS uses the built-in statistical forecaster (drift/vol bands).

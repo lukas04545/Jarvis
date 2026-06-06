@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from jarvis import (  # noqa: E402
     agents, deepseek, device, fallback, forecast, memory, news, osint, runtime,
-    signals, surveillance, webcams,
+    signals, stocks, surveillance, webcams,
 )
 from jarvis.cache import TTLCache  # noqa: E402
 import app as app_module  # noqa: E402
@@ -501,6 +501,49 @@ def test_cortex_rides_along_when_memory_exists():
 def test_full_roster_has_recon_and_cortex():
     assert {"RECON", "CORTEX"} <= set(agents.AGENTS_BY_NAME)
     assert len(agents.AGENTS) >= 13
+
+
+# ── Stocks (tracking + TimesFM/statistical forecast) ───────────────────────
+def test_stooq_symbol_mapping():
+    assert stocks._stooq_symbol("AAPL") == "aapl.us"
+    assert stocks._stooq_symbol("^SPX") == "^spx"
+    assert stocks._stooq_symbol("cl.f") == "cl.f"
+
+
+def test_gbm_forecast_shape_and_bands():
+    import math
+    closes = [100.0]
+    for i in range(1, 80):                       # realistic volatility
+        closes.append(closes[-1] * math.exp(0.001 + (0.02 if i % 2 else -0.017)))
+    fc = stocks._gbm_forecast(closes, 15)
+    assert len(fc) == 15
+    for p in fc:
+        assert p["lo"] <= p["yhat"] <= p["hi"]
+    # the confidence cone widens with horizon
+    assert (fc[-1]["hi"] - fc[-1]["lo"]) > (fc[0]["hi"] - fc[0]["lo"])
+
+
+def test_get_forecast_falls_back_to_simulated(monkeypatch):
+    # Force the live history fetch to fail → deterministic simulated series.
+    monkeypatch.setattr(stocks, "_fetch_history", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("blocked")))
+    monkeypatch.setattr(stocks.config, "CACHE_TTL", 0)
+    d = stocks.get_forecast("AAPL", horizon=20)
+    assert d["simulated"] is True and d["ticker"] == "AAPL"
+    assert d["method"] == "statistical" and len(d["forecast"]) == 20
+    assert d["history"] and "predicted" in d
+
+
+def test_stocks_endpoint(client, monkeypatch):
+    monkeypatch.setattr(stocks, "_fetch_history", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
+    monkeypatch.setattr(stocks.config, "CACHE_TTL", 0)
+    r = client.get("/api/stocks/MSFT?horizon=10")
+    assert r.status_code == 200
+    d = r.get_json()
+    assert d["ticker"] == "MSFT" and len(d["forecast"]) == 10
+
+
+def test_stocks_invalid_ticker(client):
+    assert client.get("/api/stocks/%20%20").status_code in (400, 404)
 
 
 def test_forecast_endpoint(client, monkeypatch):
