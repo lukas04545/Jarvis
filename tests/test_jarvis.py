@@ -11,9 +11,20 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from jarvis import (  # noqa: E402
-    agents, deepseek, device, fallback, forecast, ingest, memory, news, osint,
-    runtime, signals, stocks, surveillance, webcams,
+    agents, braintools, deepseek, device, fallback, forecast, ingest, memory, news,
+    osint, runtime, signals, stocks, surveillance, webcams,
 )
+
+
+class _FakeResp:
+    def __init__(self, payload):
+        self._p = payload
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return self._p
 from jarvis.cache import TTLCache  # noqa: E402
 import app as app_module  # noqa: E402
 
@@ -567,10 +578,56 @@ def test_ingest_distills_with_deepseek(monkeypatch):
     monkeypatch.setattr(ingest.news, "get_news", lambda: {"items": [
         {"title": "X", "topic": "TECH", "region": "Global"}]})
     monkeypatch.setattr(ingest.deepseek, "complete",
-                        lambda *a, **k: '```json\n[{"fact":"Chip export curbs widen","tags":["chips","trade"]}]\n```')
+                        lambda *a, **k: '```json\n[{"fact":"Chip export curbs widen","tags":["chips","trade"],"domain":"TECH"}]\n```')
     st = ingest.ingest_once()
     assert st["processor"] == "deepseek" and st["last_count"] == 1
     assert memory.recall("chip export", k=1)
+    # distilled neuron is tagged with its topic/domain (drives the colour map)
+    assert memory.graph()["neurons"][0]["meta"]["topic"] == "TECH"
+
+
+# ── DeepSeek full brain access (tool calling) ──────────────────────────────
+def test_braintools_impls_read_write():
+    assert braintools._save(text="Operator prefers terse briefings")["saved"]
+    hits = braintools._recall(query="terse briefings")
+    assert hits and "terse" in hits[0]["text"].lower()
+    assert braintools._stats()["neurons"] >= 1
+
+
+def test_complete_with_tools_offline_returns_stub(monkeypatch):
+    monkeypatch.setattr(deepseek.config, "DEEPSEEK_API_KEY", "")
+    out = deepseek.complete_with_tools([{"role": "user", "content": "hi"}],
+                                       braintools.SCHEMA, braintools.IMPLS)
+    assert "OFFLINE MODE" in out["text"] and out["tools_used"] == []
+
+
+def test_complete_with_tools_executes_and_saves(monkeypatch):
+    monkeypatch.setattr(deepseek.config, "DEEPSEEK_API_KEY", "sk-x")   # online
+    calls = {"n": 0}
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        calls["n"] += 1
+        if calls["n"] == 1:   # first round: model asks to save a memory
+            return _FakeResp({"choices": [{"message": {
+                "role": "assistant", "content": None,
+                "tool_calls": [{"id": "c1", "type": "function", "function": {
+                    "name": "save_memory",
+                    "arguments": '{"text":"Operator likes terse briefings","tags":["pref"]}'}}]}}]})
+        return _FakeResp({"choices": [{"message": {"role": "assistant", "content": "Noted, Operator."}}]})
+
+    monkeypatch.setattr(deepseek.requests, "post", fake_post)
+    out = deepseek.complete_with_tools([{"role": "user", "content": "remember I like terse"}],
+                                       braintools.SCHEMA, braintools.IMPLS)
+    assert out["text"] == "Noted, Operator."
+    assert any(t["name"] == "save_memory" for t in out["tools_used"])
+    assert memory.recall("terse briefings", k=1)   # DeepSeek actually wrote to the brain
+
+
+def test_chat_endpoint_returns_tools_used(client, monkeypatch):
+    monkeypatch.setattr(app_module.deepseek, "complete_with_tools",
+                        lambda *a, **k: {"text": "ok", "tools_used": [{"name": "recall_memory", "args": {}}]})
+    d = client.post("/api/chat", json={"message": "hello"}).get_json()
+    assert d["reply"] == "ok" and d["tools_used"][0]["name"] == "recall_memory"
 
 
 def test_ingest_endpoint(client, monkeypatch):

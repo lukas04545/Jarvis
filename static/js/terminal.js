@@ -217,43 +217,23 @@
 
   async function streamChat(message) {
     const line = addLine("jarvis", "");
-    const cursor = '<span class="cursor">▌</span>';
-    line.innerHTML = cursor;
-    let buf = "";
+    line.innerHTML = '<span class="cursor">▌</span> accessing memory…';
     try {
-      const r = await fetch("/api/chat/stream", {
+      // Tool-enabled chat: DeepSeek can recall/search/save the brain itself.
+      const r = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message, with_context: true }),
       });
-      const reader = r.body.getReader();
-      const dec = new TextDecoder();
-      let sse = "";
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        sse += dec.decode(value, { stream: true });
-        const parts = sse.split("\n\n");
-        sse = parts.pop();
-        for (const p of parts) {
-          const m = p.match(/^data: (.*)$/m);
-          if (!m) continue;
-          if (m[1] === "[DONE]") continue;
-          let payload;
-          try { payload = JSON.parse(m[1]); } catch { continue; }
-          if (payload.error) {
-            line.className = "line err";
-            line.textContent = "ERROR: " + payload.error;
-            return;
-          }
-          if (payload.delta) {
-            buf += payload.delta;
-            line.innerHTML = esc(buf) + cursor;
-            log.scrollTop = log.scrollHeight;
-          }
-        }
+      const d = await r.json();
+      if (d.error) { line.className = "line err"; line.textContent = "ERROR: " + d.error; return; }
+      line.textContent = d.reply || "(no response)";
+      const tools = d.tools_used || [];
+      if (tools.length) {
+        const names = tools.map((t) => t.name.replace("_memory", "").replace("brain_", "")).join(", ");
+        addLine("sys", `🧠 brain: ${names}`);
+        if (window.JarvisBrain && tools.some((t) => t.name === "save_memory")) JarvisBrain.reload();
       }
-      line.textContent = buf || "(no response)";
     } catch (e) {
       line.className = "line err";
       line.textContent = "Link error: " + e.message;

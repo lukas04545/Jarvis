@@ -94,9 +94,11 @@ def _distill(items: List[Dict]) -> List[Dict]:
     prompt = (
         "You are an intelligence analyst. From these scraped news items, extract the "
         "key, durable intelligence as a JSON array (no prose) of objects "
-        '{"fact","tags"} where fact is one concise factual statement (<140 chars) '
-        "and tags is 2-5 lowercase keyword tags (entities, places, themes). Merge "
-        "duplicates; keep only substantive items.\n\nNEWS:\n" + "\n".join(lines)
+        '{"fact","tags","domain"} where fact is one concise factual statement '
+        "(<140 chars), tags is 2-5 lowercase keyword tags (entities, places, "
+        "themes), and domain is ONE of CONFLICT, MARKETS, POLITICS, DISASTER, "
+        "CYBER, TECH, SPACE, HEALTH, GENERAL. Merge duplicates; keep substantive "
+        "items only.\n\nNEWS:\n" + "\n".join(lines)
     )
     raw = deepseek.complete(
         [{"role": "system", "content": "You output only valid JSON arrays."},
@@ -107,7 +109,9 @@ def _distill(items: List[Dict]) -> List[Dict]:
     for o in _parse_json_array(raw):
         fact = str(o.get("fact", "")).strip()
         if fact:
-            out.append({"text": fact, "tags": [str(t).lower() for t in (o.get("tags") or [])][:6]})
+            out.append({"text": fact,
+                        "tags": [str(t).lower() for t in (o.get("tags") or [])][:6],
+                        "domain": str(o.get("domain", "GENERAL")).upper()[:10]})
     return out
 
 
@@ -129,7 +133,7 @@ def ingest_once(limit: int = 24) -> Dict:
     if facts:
         for f in facts:
             if memory.add(f["text"], kind="news", tags=f["tags"],
-                          meta={"source": "DeepSeek synthesis", "processor": "deepseek"}):
+                          meta={"source": "DeepSeek synthesis", "topic": f.get("domain", "GENERAL")}):
                 count += 1
     else:
         for it in items:

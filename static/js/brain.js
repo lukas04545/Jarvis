@@ -16,6 +16,15 @@ window.JarvisBrain = (() => {
     note: "#38e1ff", taskforce: "#ff9e1b", chat: "#3ddc84",
     osint: "#ff5db1", intel: "#9d7bff", fact: "#7ad6c0", news: "#5db6ff",
   };
+  // News neurons are coloured by their topic for a richer map.
+  const TOPIC_COLORS = {
+    CONFLICT: "#ff4d4d", MARKETS: "#3ddc84", POLITICS: "#38e1ff", DISASTER: "#ff9e1b",
+    CYBER: "#ff5db1", TECH: "#c08bff", SPACE: "#9d7bff", HEALTH: "#7ad6c0", GENERAL: "#8aa0b4",
+  };
+  function nodeColor(n) {
+    const t = ((n.meta && n.meta.topic) || "").toUpperCase();
+    return TOPIC_COLORS[t] || KIND_COLORS[n.kind] || "#8aa0b4";
+  }
   const FOCAL = 900;          // perspective focal length
   const BOUND = 230;          // containment sphere radius
 
@@ -81,8 +90,13 @@ window.JarvisBrain = (() => {
     const el = $("brain-stats");
     if (el) el.textContent = `${g.count} neurons · ${g.synapses} synapses · 3D`;
     const k = $("brain-kinds");
-    if (k && g.stats) k.innerHTML = Object.entries(g.stats.kinds || {})
+    if (!k) return;
+    const kinds = Object.entries((g.stats && g.stats.kinds) || {})
       .map(([kind, n]) => `<span class="kind-chip" style="color:${color(kind)};border-color:${color(kind)}">${esc(kind)} ${n}</span>`).join("");
+    // Topic colour legend (which colours mean what).
+    const legend = Object.entries(TOPIC_COLORS).filter(([t]) => t !== "GENERAL")
+      .map(([t, c]) => `<span class="kind-chip" style="color:${c};border-color:${c}">${t}</span>`).join("");
+    k.innerHTML = kinds + (legend ? `<span class="legend-sep">topics:</span>` + legend : "");
   }
 
   // ── 3D physics ────────────────────────────────────────────────────────
@@ -140,29 +154,47 @@ window.JarvisBrain = (() => {
   function draw(t) {
     ctx.clearRect(0, 0, W, H);
     for (const n of nodes) project(n);
+    // neighbours of the selected neuron (for focus highlighting)
+    let nbr = null;
+    if (selected) {
+      nbr = new Set();
+      for (const e of edges) {
+        if (e.a === selected.id) nbr.add(e.b);
+        if (e.b === selected.id) nbr.add(e.a);
+      }
+    }
     // synapses
     for (const e of edges) {
       const a = byId[e.a], b = byId[e.b];
-      const al = (0.06 + e.w * 0.4) * fog((a.depth + b.depth) / 2);
+      const touches = selected && (e.a === selected.id || e.b === selected.id);
+      let al = (0.06 + e.w * 0.4) * fog((a.depth + b.depth) / 2);
+      if (selected) al = touches ? Math.min(1, al + 0.5) : al * 0.18;
       ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy);
-      ctx.strokeStyle = `rgba(56,225,255,${al.toFixed(3)})`;
+      ctx.strokeStyle = touches ? `rgba(255,255,255,${al.toFixed(3)})` : `rgba(56,225,255,${al.toFixed(3)})`;
       ctx.lineWidth = (0.4 + e.w * 1.4) * Math.min(a.scale, b.scale);
       ctx.stroke();
     }
     // neurons, far→near
     const order = [...nodes].sort((p, q) => p.depth - q.depth);
     for (const n of order) {
-      const r = Math.max(1.5, radius(n)), col = color(n.kind), a = fog(n.depth);
+      const r = Math.max(1.5, radius(n)), col = nodeColor(n);
+      const focused = !selected || n === selected || (nbr && nbr.has(n.id));
+      const a = fog(n.depth) * (focused ? 1 : 0.22);
       const pulse = 0.6 + 0.4 * Math.sin(t / 600 + n.x * 0.05);
       ctx.globalAlpha = a * 0.25;
       ctx.beginPath(); ctx.arc(n.sx, n.sy, r + 5 * n.scale, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill();
       ctx.globalAlpha = a * pulse;
       ctx.beginPath(); ctx.arc(n.sx, n.sy, r, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill();
       ctx.globalAlpha = 1;
+      // label hubs (and the selection + its neighbours) for readability
+      const isHub = (n.degree || 0) >= 4 && n.scale > 0.9;
+      if (n === selected || (nbr && nbr.has(n.id)) || (isHub && !selected)) {
+        ctx.fillStyle = n === selected ? "#fff" : "#aebccb";
+        ctx.font = "10px 'IBM Plex Mono', monospace";
+        ctx.fillText((n.text || "").slice(0, 38), n.sx + r + 5, n.sy + 3);
+      }
       if (n === selected) {
         ctx.beginPath(); ctx.arc(n.sx, n.sy, r + 4, 0, Math.PI * 2); ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.3; ctx.stroke();
-        ctx.fillStyle = "#dfeaf4"; ctx.font = "10px 'IBM Plex Mono', monospace";
-        ctx.fillText((n.text || "").slice(0, 40), n.sx + r + 6, n.sy + 3);
       }
     }
     if (!nodes.length) {
@@ -212,8 +244,10 @@ window.JarvisBrain = (() => {
     if (m.region || m.topic) metaHtml += `<div class="kv"><span>CONTEXT</span><b>${esc([m.region, m.topic].filter(Boolean).join(" · "))}</b></div>`;
     if (m.time) metaHtml += `<div class="kv"><span>SEEN</span><b>${esc(m.time)}</b></div>`;
     if (m.link) metaHtml += `<div class="kv"><span>LINK</span><b><a href="${esc(m.link)}" target="_blank" rel="noopener">open ↗</a></b></div>`;
+    const hcol = nodeColor(n);
+    const label = ((n.meta && n.meta.topic) || n.kind).toUpperCase();
     el.innerHTML =
-      `<div class="vision-head" style="color:${color(n.kind)}">⬡ ${esc(n.kind).toUpperCase()} NEURON</div>` +
+      `<div class="vision-head" style="color:${hcol}">⬡ ${esc(label)} NEURON</div>` +
       `<div class="brain-mem">${esc(n.text)}</div>` +
       metaHtml +
       `<div class="news-src">${n.degree || 0} synapses · activated ${n.activations || 1}× · ${new Date((n.created || 0) * 1000).toISOString().slice(0, 16)}Z</div>` +

@@ -23,6 +23,7 @@ from config import config
 from jarvis import (
     __version__,
     agents,
+    braintools,
     briefing,
     deepseek,
     device,
@@ -280,8 +281,11 @@ def api_chat():
     if not prompt:
         return jsonify({"error": "empty message"}), 400
     try:
-        reply = deepseek.complete(deepseek.build_messages(prompt, context))
-        return jsonify({"reply": reply})
+        # Full brain access: DeepSeek can recall / search / save memory via tools.
+        result = deepseek.complete_with_tools(
+            deepseek.build_messages(prompt, context),
+            braintools.SCHEMA, braintools.IMPLS)
+        return jsonify({"reply": result["text"], "tools_used": result["tools_used"]})
     except deepseek.DeepSeekError as exc:
         return jsonify({"error": str(exc)}), 502
 

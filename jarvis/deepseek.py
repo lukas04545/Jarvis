@@ -29,7 +29,11 @@ SYSTEM_PROMPT = (
     "favour signal over noise: lead with the assessment, then the evidence. "
     "When given news or surveillance data, synthesise it into actionable "
     "situational awareness. Use terminal-friendly plain text; no markdown "
-    "headers. Be candid about uncertainty. Address the operator as 'Operator'."
+    "headers. Be candid about uncertainty. Address the operator as 'Operator'. "
+    "You have a persistent neural memory you can use via tools: recall_memory to "
+    "look up what you know, save_memory to remember important new facts, and "
+    "brain_stats. Recall before answering when prior context would help, and save "
+    "durable conclusions so you build continuity across sessions."
 )
 
 
@@ -134,6 +138,67 @@ def stream(
                     yield piece
     except requests.RequestException as exc:
         raise DeepSeekError(f"DeepSeek stream failed: {exc}") from exc
+
+
+def complete_with_tools(
+    messages: List[Dict],
+    tools: List[Dict],
+    impls: Dict,
+    *,
+    temperature: float = 0.4,
+    max_tokens: int = 900,
+    max_rounds: int = 4,
+) -> Dict:
+    """Run a tool-calling loop, giving the model live access to ``impls``.
+
+    Returns ``{"text", "tools_used"}``. Falls back to an offline stub with no
+    tools when the AI core is offline.
+    """
+    if not runtime.ai_online():
+        return {"text": _offline_reply(messages), "tools_used": []}
+
+    msgs = list(messages)
+    used: List[Dict] = []
+    for _ in range(max_rounds):
+        payload = {
+            "model": config.DEEPSEEK_MODEL, "messages": msgs,
+            "temperature": temperature, "max_tokens": max_tokens,
+            "tools": tools, "tool_choice": "auto", "stream": False,
+        }
+        try:
+            resp = requests.post(f"{config.DEEPSEEK_BASE_URL}/chat/completions",
+                                 headers=_headers(), json=payload, timeout=90)
+            resp.raise_for_status()
+            msg = resp.json()["choices"][0]["message"]
+        except (requests.RequestException, KeyError, ValueError) as exc:
+            raise DeepSeekError(f"DeepSeek tool call failed: {exc}") from exc
+
+        calls = msg.get("tool_calls")
+        if not calls:
+            return {"text": msg.get("content", "") or "", "tools_used": used}
+
+        msgs.append(msg)  # assistant message carrying the tool_calls
+        for tc in calls:
+            name = (tc.get("function") or {}).get("name", "")
+            try:
+                args = json.loads((tc["function"].get("arguments") or "{}"))
+            except (json.JSONDecodeError, KeyError):
+                args = {}
+            fn = impls.get(name)
+            try:
+                result = fn(**args) if fn else f"unknown tool: {name}"
+            except Exception as exc:
+                result = f"tool error: {exc}"
+            used.append({"name": name, "args": args})
+            msgs.append({"role": "tool", "tool_call_id": tc.get("id"),
+                         "content": json.dumps(result)[:2500]})
+
+    # Out of rounds — ask once more for a plain answer.
+    try:
+        text = complete(msgs)
+    except DeepSeekError:
+        text = "I gathered context from memory but couldn't finalise a reply."
+    return {"text": text, "tools_used": used}
 
 
 def build_messages(user_prompt: str, context: str | None = None) -> List[Dict[str, str]]:

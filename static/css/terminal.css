@@ -410,6 +410,7 @@ body { display: flex; flex-direction: column; }
 #brain-canvas:active { cursor: grabbing; }
 .brain-kinds { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
 .kind-chip { font-size: 9px; border: 1px solid; padding: 0 5px; letter-spacing: 1px; }
+.legend-sep { color: var(--text-dim); font-size: 9px; margin: 0 2px 0 6px; letter-spacing: 1px; }
 .brain-rail { width: 320px; flex-shrink: 0; background: var(--panel); border: 1px solid var(--grid-line); display: flex; flex-direction: column; overflow-y: auto; }
 .brain-rail #brain-input { width: 100%; background: var(--bg); border: 1px solid var(--grid-line); color: var(--amber); font-family: var(--font); font-size: 13px; padding: 7px 9px; outline: none; }
 .brain-mem { color: var(--text); font-size: 13px; line-height: 1.45; margin: 6px 0; }
