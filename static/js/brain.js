@@ -14,7 +14,7 @@ window.JarvisBrain = (() => {
 
   const KIND_COLORS = {
     note: "#38e1ff", taskforce: "#ff9e1b", chat: "#3ddc84",
-    osint: "#ff5db1", intel: "#9d7bff", fact: "#7ad6c0",
+    osint: "#ff5db1", intel: "#9d7bff", fact: "#7ad6c0", news: "#5db6ff",
   };
   const FOCAL = 900;          // perspective focal length
   const BOUND = 230;          // containment sphere radius
@@ -33,6 +33,25 @@ window.JarvisBrain = (() => {
       const g = await (await fetch("/api/memory")).json();
       sync(g); renderStats(g);
     } catch (e) { /* ignore */ }
+    refreshIngest();
+  }
+  async function refreshIngest() {
+    try {
+      const s = await (await fetch("/api/ingest")).json();
+      const el = document.getElementById("ingest-status");
+      if (el) el.textContent = s.auto
+        ? `auto · ${s.runs} runs · ${s.processor}` : `manual · ${s.processor}`;
+    } catch (e) { /* ignore */ }
+  }
+  async function ingestNow() {
+    const btn = document.getElementById("ingest-now");
+    if (btn) { btn.disabled = true; btn.textContent = "⟳ scraping & distilling…"; }
+    try {
+      const r = await (await fetch("/api/ingest", { method: "POST" })).json();
+      if (r.neurons != null) { const el = document.getElementById("ingest-status"); if (el) el.textContent = `+${r.last_count} · ${r.processor} · ${r.neurons} neurons`; }
+    } catch (e) { /* ignore */ }
+    if (btn) { btn.disabled = false; btn.textContent = "⟳ INGEST NEWS NOW"; }
+    load();
   }
   function sync(g) {
     const prev = byId; byId = {};
@@ -214,6 +233,8 @@ window.JarvisBrain = (() => {
       $("brain-add").addEventListener("click", () => imprint($("brain-input").value));
       $("brain-input").addEventListener("keydown", (e) => { if (e.key === "Enter") imprint(e.target.value); });
       $("brain-refresh").addEventListener("click", load);
+      const ing = document.getElementById("ingest-now");
+      if (ing) ing.addEventListener("click", ingestNow);
       inited = true;
     }
     resize(); load();

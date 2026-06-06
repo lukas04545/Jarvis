@@ -11,8 +11,8 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from jarvis import (  # noqa: E402
-    agents, deepseek, device, fallback, forecast, memory, news, osint, runtime,
-    signals, stocks, surveillance, webcams,
+    agents, deepseek, device, fallback, forecast, ingest, memory, news, osint,
+    runtime, signals, stocks, surveillance, webcams,
 )
 from jarvis.cache import TTLCache  # noqa: E402
 import app as app_module  # noqa: E402
@@ -501,6 +501,52 @@ def test_cortex_rides_along_when_memory_exists():
 def test_full_roster_has_recon_and_cortex():
     assert {"RECON", "CORTEX"} <= set(agents.AGENTS_BY_NAME)
     assert len(agents.AGENTS) >= 13
+
+
+# ── News → brain ingestion (continuous learning) ───────────────────────────
+def test_ingest_offline_stores_headlines_as_neurons(monkeypatch):
+    monkeypatch.setattr(deepseek.config, "DEEPSEEK_API_KEY", "")  # offline → raw path
+    sample = {"items": [
+        {"title": "Border clashes intensify in the east", "topic": "CONFLICT", "region": "MENA"},
+        {"title": "Markets fall on rate fears", "topic": "MARKETS", "region": "Global"},
+    ]}
+    monkeypatch.setattr(ingest.news, "get_news", lambda: sample)
+    st = ingest.ingest_once()
+    assert st["processor"] == "raw" and st["last_count"] == 2
+    assert memory.stats()["neurons"] == 2
+    # stored as 'news' neurons that can be recalled
+    assert memory.recall("border clashes", k=1)
+
+
+def test_ingest_distills_with_deepseek(monkeypatch):
+    monkeypatch.setattr(ingest.runtime, "ai_online", lambda: True)
+    monkeypatch.setattr(ingest.news, "get_news", lambda: {"items": [
+        {"title": "X", "topic": "TECH", "region": "Global"}]})
+    monkeypatch.setattr(ingest.deepseek, "complete",
+                        lambda *a, **k: '```json\n[{"fact":"Chip export curbs widen","tags":["chips","trade"]}]\n```')
+    st = ingest.ingest_once()
+    assert st["processor"] == "deepseek" and st["last_count"] == 1
+    assert memory.recall("chip export", k=1)
+
+
+def test_ingest_endpoint(client, monkeypatch):
+    monkeypatch.setattr(deepseek.config, "DEEPSEEK_API_KEY", "")
+    monkeypatch.setattr(app_module.ingest.news, "get_news",
+                        lambda: {"items": [{"title": "Quake hits coast", "topic": "DISASTER", "region": "Asia"}]})
+    d = client.post("/api/ingest").get_json()
+    assert d["last_count"] == 1 and d["count"] == 1   # graph() count merged in
+
+
+def test_forecast_feeds_brain_memory_into_prompt(monkeypatch):
+    memory.add("Eastern border tensions have been escalating for weeks", kind="news")
+    captured = {}
+    monkeypatch.setattr(forecast.deepseek, "complete",
+                        lambda msgs, **k: captured.setdefault("p", msgs[-1]["content"]) and None or "[]")
+    sig = {"domains": {}, "regions": {}, "gdelt": {}, "markets": {}, "geophysical": {},
+           "satellite": {}, "anomalies": ["border tensions escalating"],
+           "top_headlines": ["Eastern border tensions rise"]}
+    forecast.ai_forecast(sig)
+    assert "PRIOR INTELLIGENCE" in captured.get("p", "")
 
 
 # ── Stocks (tracking + TimesFM/statistical forecast) ───────────────────────

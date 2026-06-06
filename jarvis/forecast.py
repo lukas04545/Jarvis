@@ -20,7 +20,7 @@ import re
 from datetime import datetime, timezone
 from typing import Dict, List
 
-from jarvis import deepseek, signals as signals_mod
+from jarvis import deepseek, memory, signals as signals_mod
 
 
 def _clamp(p: float) -> float:
@@ -155,10 +155,18 @@ def ai_forecast(sig: Dict) -> List[Dict]:
         "geophysical": sig.get("geophysical"), "satellite": sig.get("satellite"),
         "anomalies": sig.get("anomalies"),
     }
+    # Pull the brain's accumulated, DeepSeek-distilled knowledge most related to
+    # the current picture — this gives the forecaster historical continuity.
+    query = " ".join(sig.get("top_headlines", [])[:8] + sig.get("anomalies", [])[:4])
+    prior = memory.recall(query, k=10)
+    prior_block = ("\n\nPRIOR INTELLIGENCE (accumulated brain memory):\n- "
+                   + "\n- ".join(m["text"] for m in prior)) if prior else ""
+
     prompt = (
         _AI_INSTRUCTIONS
         + "\n\nSIGNAL VECTOR:\n" + json.dumps(compact, separators=(",", ":"))
         + "\n\nTOP HEADLINES:\n- " + "\n- ".join(sig.get("top_headlines", [])[:15])
+        + prior_block
     )
     raw = deepseek.complete(
         [{"role": "system", "content": "You output only valid JSON arrays."},

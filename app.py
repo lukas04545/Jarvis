@@ -13,6 +13,7 @@ Serves the terminal UI and a small JSON/SSE API:
 from __future__ import annotations
 
 import json
+import os
 from typing import Iterator
 
 from flask import Flask, Response, jsonify, render_template, request, send_from_directory
@@ -26,6 +27,7 @@ from jarvis import (
     device,
     forecast,
     gdelt,
+    ingest,
     markets,
     memory,
     news,
@@ -117,6 +119,17 @@ def api_memory_add():
 @app.route("/api/memory/<nid>", methods=["DELETE"])
 def api_memory_forget(nid):
     return jsonify({"ok": memory.forget(nid)})
+
+
+@app.route("/api/ingest", methods=["GET"])
+def api_ingest_status():
+    return jsonify(ingest.get_status())
+
+
+@app.route("/api/ingest", methods=["POST"])
+def api_ingest_run():
+    # Scrape news → distil with DeepSeek → imprint connected neurons.
+    return jsonify({**ingest.ingest_once(), **memory.graph()})
 
 
 @app.route("/api/webcams")
@@ -301,4 +314,7 @@ if __name__ == "__main__":
         f"  Terminal:  http://{config.HOST}:{config.PORT}\n"
     )
     print(banner)
+    # Continuous learning: scrape news → distil → connected neurons → forecasts.
+    if os.environ.get("JARVIS_AUTO_INGEST", "1") != "0":
+        ingest.start_background(int(os.environ.get("JARVIS_INGEST_INTERVAL", "600")))
     app.run(host=config.HOST, port=config.PORT, threaded=True)

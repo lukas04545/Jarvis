@@ -33,7 +33,8 @@
 | **⌬ Agent Mesh** | A multi-agent harness: Director J.A.R.V.I.S. routes a tasking to **13 specialist subagents** (GEOINT, ECONINT, GEOPHYS, CYBER, ORACLE, OSINT, MEDINT, ENERGY, CLIMATE, SENTINEL, REDCELL, RECON, CORTEX), each with its own persona and data tools, run **concurrently** over DeepSeek and streamed live (SSE) — then fused into one attributed briefing. |
 | **⊟ Device Sensors** | Consent-gated access to the operator's **own** device via standard browser APIs: memory/hardware/screen/network/power telemetry, **screen capture** (`getDisplayMedia`, frames stay local), and **voice input** (Web Speech API → JARVIS) plus a local input-activity meter. Telemetry syncs to the **SENTINEL** agent. See [Ethics & scope](#ethics--scope). |
 | **👁 JARVIS Vision** | Makes JARVIS *see* the shared screen — **on-device** OCR (Tesseract.js) extracts the on-screen text and a pixel-level visual summary (resolution, theme, dominant colour); the image never leaves the device. Press **ASK JARVIS** to send the extracted text to the AI for analysis. Multi-language (EN/DE/ES/FR) for both speech-to-text and OCR. |
-| **✺ Neural Brain (persistent memory)** | A persistent associative memory: each memory is a **neuron**, shared keywords form **synapses**. Rendered as connected, animated **dots** you can drag and inspect. Memories form automatically from taskings/chat (and `REMEMBER`), survive restarts, and are **recalled into context** so JARVIS has continuity. |
+| **✺ Neural Brain (persistent memory)** | A persistent associative memory rendered as a rotating **3D** network: each memory is a **neuron**, shared keywords/entities form **synapses** that connect automatically. Survives restarts and is **recalled into context** so JARVIS has continuity. |
+| **⟲ Continuous learning** | A background pipeline **scrapes the global news**, **distils each batch with DeepSeek** into intelligence facts, and imprints them as **auto-connecting news neurons** — which the **ORACLE reads when forecasting**, so predictions improve as the brain learns. Runs automatically (or `INGEST NEWS NOW`). |
 | **⊠ RECON (email-exposure OSINT)** | Account-discovery (**holehe**-style) + **breach-directory** lookup for an email's public exposure. Authorised/defensive use only — requires a consent acknowledgement, one address at a time, and returns **account-existence + breach metadata only (never passwords or leaked records)**. See [Ethics & scope](#ethics--scope). |
 
 ## Quick start
@@ -131,6 +132,7 @@ jarvis/
   forecast.py           ORACLE — heuristic + DeepSeek event predictions
   agents.py             multi-agent harness (Director + 13 specialist subagents)
   memory.py             persistent neural memory (neurons + synapses)
+  ingest.py             news→brain learning loop (scrape → DeepSeek → neurons)
   osint.py              email-exposure recon (holehe + breach metadata)
   device.py             device-telemetry store (in-memory, sanitised, local)
   briefing.py           AI briefing synthesis from the live picture
@@ -168,6 +170,7 @@ tests/test_jarvis.py    network-free unit + API + PWA tests
 | `POST` | `/api/agents` · `/api/agents/stream` | **Agent Mesh** — multi-agent taskforce (JSON / SSE) |
 | `GET`/`POST` | `/api/device` | device telemetry store (read / report from own browser) |
 | `GET`/`POST`/`DELETE` | `/api/memory` | neural memory — graph / imprint / recall / forget |
+| `GET`/`POST` | `/api/ingest` | continuous-learning status / run news→brain ingestion |
 | `POST` | `/api/osint` | email-exposure recon (authorised; metadata only) |
 | `GET` | `/api/briefing` | AI situational briefing |
 | `POST` | `/api/chat` · `/api/chat/stream` | JARVIS reply (JSON / SSE) |
@@ -230,7 +233,7 @@ Use the **⌬ AGENT MESH** tab, or type `AGENTS <tasking>` in the console
 
 ```bash
 . .venv/bin/activate && pip install pytest
-python -m pytest -q          # 59 passing, no network required
+python -m pytest -q          # 63 passing, no network required
 ```
 
 ## Ethics & scope

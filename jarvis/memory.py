@@ -25,9 +25,9 @@ _PATH = os.environ.get(
 
 _lock = threading.Lock()
 _neurons: Dict[str, dict] = {}
-MAX_NEURONS = 600
+MAX_NEURONS = 1500
 EDGE_MIN_SHARED = 1
-EDGE_MIN_WEIGHT = 0.08
+EDGE_MIN_WEIGHT = 0.1
 
 _STOP = set(
     "the a an and or of to in on for with at by from is are was were be been being this that "
@@ -107,7 +107,9 @@ def _edges_locked() -> List[dict]:
             shared = ti & tj
             if len(shared) < EDGE_MIN_SHARED:
                 continue
-            w = len(shared) / len(ti | tj)
+            # Min-overlap similarity: a shared entity/keyword links two memories
+            # even when one is much longer — so the graph connects readily.
+            w = len(shared) / min(len(ti), len(tj))
             if w >= EDGE_MIN_WEIGHT:
                 edges.append({"a": items[i]["id"], "b": items[j]["id"],
                               "w": round(w, 2), "shared": sorted(shared)[:4]})
