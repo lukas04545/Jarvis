@@ -741,7 +741,12 @@
       const files = (d.files_changed || []).map((f) => `<span class="kind-chip">${esc(f)}</span>`).join("") || "<span class='news-src'>none</span>";
       const tests = d.tests
         ? `<span class="${d.tests.passed ? "up" : "down"}">${d.tests.passed ? "✓ tests pass" : "✕ tests fail"}</span>` : "<span class='news-src'>not run</span>";
+      const banner = d.rolled_back
+        ? `<div class="dev-rollback-banner">⟲ CHANGES AUTO-ROLLED BACK — tests failed, restored the previous working version` +
+          (d.tests_after_rollback ? ` (now ${d.tests_after_rollback.passed ? "✓ green" : "✕ still failing"})` : "") + `</div>`
+        : (d.files_changed && d.files_changed.length ? `<div class="dev-applied-banner">✓ CHANGES APPLIED — use ↺ ROLLBACK to undo</div>` : "");
       body.innerHTML =
+        banner +
         `<div class="dev-summary"><div class="vision-head">◈ SUMMARY</div>${esc(d.summary || "").replace(/\n/g, "<br>")}</div>` +
         `<div class="kv"><span>FILES CHANGED</span><b>${files}</b></div>` +
         `<div class="kv"><span>TESTS</span><b>${tests}</b></div>` +
@@ -756,6 +761,16 @@
   }
   $("dev-run").addEventListener("click", () => runDev());
   $("dev-task").addEventListener("keydown", (e) => { if (e.key === "Enter") runDev(); });
+  $("dev-rollback").addEventListener("click", async () => {
+    if (devBusy) return;
+    try {
+      const d = await (await fetch("/api/dev/rollback", { method: "POST" })).json();
+      const n = (d.restored || []).length;
+      $("dev-body").innerHTML = d.error
+        ? `<div class="err">${esc(d.error)}</div>`
+        : `<div class="dev-rollback-banner">↺ ${n ? "restored " + n + " file(s) to the previous version" : esc(d.note || "nothing to roll back")}</div>`;
+    } catch (e) { $("dev-body").innerHTML = `<div class="err">rollback failed: ${esc(e.message)}</div>`; }
+  });
 
   // ── RECON (email-exposure OSINT) ──────────────────────────────────────
   function reconGate() {

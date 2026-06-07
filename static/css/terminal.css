@@ -451,6 +451,9 @@ body { display: flex; flex-direction: column; }
 .dev-ic { color: var(--amber); display: inline-block; width: 14px; }
 .dev-body .up { color: var(--green); } .dev-body .down { color: var(--red); }
 .dev-diff { background: var(--bg); border: 1px solid var(--grid-line); padding: 8px; font-size: 11px; color: var(--text-dim); overflow-x: auto; max-height: 180px; white-space: pre; }
+.dev-rollback-banner { background: rgba(255,77,77,0.12); border: 1px solid var(--red); color: var(--red); padding: 7px 10px; font-size: 11px; letter-spacing: 1px; margin-bottom: 10px; }
+.dev-applied-banner { background: rgba(61,220,132,0.1); border: 1px solid #1f3a2a; color: var(--green); padding: 7px 10px; font-size: 11px; letter-spacing: 1px; margin-bottom: 10px; }
+#dev-rollback { flex-shrink: 0; }
 
 /* ── STOCKS VIEW ───────────────────────────────────────────────────────── */
 .stocks-view { padding: 6px; }

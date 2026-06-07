@@ -207,6 +207,13 @@ def api_dev_run():
     return jsonify(result), code
 
 
+@app.route("/api/dev/rollback", methods=["POST"])
+def api_dev_rollback():
+    if not devagent.enabled():
+        return jsonify({"error": "DEV agent is disabled"}), 403
+    return jsonify(devagent.rollback_last())
+
+
 @app.route("/api/agents", methods=["POST"])
 def api_agents():
     query = ((request.get_json(silent=True) or {}).get("query") or "").strip()

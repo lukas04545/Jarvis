@@ -18,6 +18,7 @@ import glob as _glob
 import os
 import subprocess
 import sys
+import threading
 from datetime import datetime, timezone
 from typing import Dict, List
 
@@ -30,6 +31,11 @@ _BLOCKED_FILES = {".env", ".jarvis_secrets.json", ".jarvis_brain.json",
                   ".jarvis_brain.json.tmp"}
 MAX_WRITE = 60000
 MAX_READ = 20000
+
+# Last applied change-set (relpath -> original text, or None if it was new), kept
+# so a change can be rolled back even after it passed.
+_CPLOCK = threading.Lock()
+_LAST_CHECKPOINT: Dict[str, str | None] = {}
 
 
 def enabled() -> bool:
@@ -68,6 +74,42 @@ def _list_files(pattern: str = "**/*.py") -> List[str]:
 def _read_file(path: str = "") -> str:
     with open(_safe(path), "r", encoding="utf-8", errors="replace") as fh:
         return fh.read()[:MAX_READ]
+
+
+def _read_raw(p: str) -> str | None:
+    try:
+        with open(p, "r", encoding="utf-8") as fh:
+            return fh.read()
+    except OSError:
+        return None
+
+
+def _restore(checkpoint: Dict[str, str | None]) -> List[str]:
+    """Restore files from a checkpoint: rewrite originals, delete new files."""
+    restored = []
+    for rel, original in checkpoint.items():
+        p = os.path.join(REPO_ROOT, rel)
+        try:
+            if original is None:
+                if os.path.exists(p):
+                    os.remove(p)
+            else:
+                with open(p, "w", encoding="utf-8") as fh:
+                    fh.write(original)
+            restored.append(rel)
+        except OSError:
+            continue
+    return restored
+
+
+def rollback_last() -> Dict:
+    """Undo the most recently applied change-set."""
+    with _CPLOCK:
+        cp = dict(_LAST_CHECKPOINT)
+        _LAST_CHECKPOINT.clear()
+    if not cp:
+        return {"restored": [], "note": "nothing to roll back"}
+    return {"restored": _restore(cp)}
 
 
 def _run_tests() -> Dict:
@@ -109,6 +151,11 @@ SCHEMA: List[Dict] = [
     {"type": "function", "function": {
         "name": "git_diff", "description": "Show a summary (git diff --stat) of pending changes.",
         "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {
+        "name": "revert_all",
+        "description": "Undo all of this session's file changes, restoring the previous versions. "
+                       "Use if your changes broke things and you want a clean slate.",
+        "parameters": {"type": "object", "properties": {}}}},
 ]
 
 _SYSTEM = (
@@ -116,9 +163,11 @@ _SYSTEM = (
     "ON the Jarvis codebase itself. Implement the Operator's task with minimal, "
     "correct, idiomatic changes that match the surrounding code. Workflow: explore "
     "with list_files/read_file FIRST, then write_file your changes, then run_tests "
-    "and fix any failures, iterating until green. Keep everything inside the "
+    "and fix any failures, iterating until green. If you get stuck or break the "
+    "build, call revert_all to roll back and start over. Keep everything inside the "
     "project; never touch secrets or .git. When done, reply with a concise summary "
-    "of what you changed and why (no tool call)."
+    "of what you changed and why (no tool call). NOTE: if the suite is still failing "
+    "at the end, your changes will be automatically rolled back."
 )
 
 
@@ -139,6 +188,9 @@ def develop(task: str, max_rounds: int = 14) -> Dict:
 
     actions: List[Dict] = []
     changed: set = set()
+    # Checkpoint: first time a path is touched, remember its prior state so the
+    # change-set can be rolled back if the tests fail.
+    checkpoint: Dict[str, str | None] = {}
 
     def rec(name, detail=""):
         actions.append({"tool": name, "detail": str(detail)[:200]})
@@ -155,10 +207,12 @@ def develop(task: str, max_rounds: int = 14) -> Dict:
         p = _safe(path)
         if len(content) > MAX_WRITE:
             return {"error": "content too large"}
+        rel = os.path.relpath(p, REPO_ROOT)
+        if rel not in checkpoint:                     # snapshot before first write
+            checkpoint[rel] = _read_raw(p) if os.path.exists(p) else None
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, "w", encoding="utf-8") as fh:
             fh.write(content)
-        rel = os.path.relpath(p, REPO_ROOT)
         changed.add(rel)
         rec("write_file", rel)
         return {"written": rel, "bytes": len(content)}
@@ -171,8 +225,15 @@ def develop(task: str, max_rounds: int = 14) -> Dict:
         rec("git_diff")
         return _git_diff()
 
+    def revert_all():
+        restored = _restore(checkpoint)
+        checkpoint.clear()
+        changed.clear()
+        rec("revert_all", f"{len(restored)} files")
+        return {"reverted": restored}
+
     impls = {"list_files": list_files, "read_file": read_file, "write_file": write_file,
-             "run_tests": run_tests, "git_diff": git_diff}
+             "run_tests": run_tests, "git_diff": git_diff, "revert_all": revert_all}
 
     messages = [{"role": "system", "content": _SYSTEM}, {"role": "user", "content": "TASK: " + task}]
     try:
@@ -181,12 +242,33 @@ def develop(task: str, max_rounds: int = 14) -> Dict:
     except deepseek.DeepSeekError as exc:
         return {"error": str(exc), "actions": actions, "files_changed": sorted(changed)}
 
+    changed_list = sorted(changed)
+    tests = _run_tests() if changed else None
+    rolled_back = False
+    tests_after_rollback = None
+    if changed and tests and not tests.get("passed"):
+        # The change-set is broken — restore the previous working versions.
+        _restore(checkpoint)
+        rec("auto_rollback", f"{len(checkpoint)} files restored")
+        rolled_back = True
+        tests_after_rollback = _run_tests()
+        with _CPLOCK:
+            _LAST_CHECKPOINT.clear()
+    else:
+        # Keep the change, but remember how to undo it on request.
+        with _CPLOCK:
+            _LAST_CHECKPOINT.clear()
+            _LAST_CHECKPOINT.update(checkpoint)
+
     return {
         "task": task,
         "summary": result["text"],
         "actions": actions,
-        "files_changed": sorted(changed),
+        "files_changed": changed_list,
         "diff": _git_diff(),
-        "tests": _run_tests() if changed else None,
+        "tests": tests,
+        "rolled_back": rolled_back,
+        "tests_after_rollback": tests_after_rollback,
+        "can_rollback": bool(changed_list) and not rolled_back,
         "generated": datetime.now(tz=timezone.utc).isoformat(),
     }

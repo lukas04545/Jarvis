@@ -727,6 +727,55 @@ def test_devagent_write_blocks_escape(tmp_path, monkeypatch):
         devagent._safe("../../evil.py")
 
 
+def _drive_write(content, tmp_path):
+    """Build a fake DeepSeek that writes module.py then finishes."""
+    state = {"n": 0}
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        state["n"] += 1
+        if state["n"] == 1:
+            args = '{"path":"module.py","content":' + __import__("json").dumps(content) + '}'
+            return _FakeResp({"choices": [{"message": {"role": "assistant", "content": None,
+                "tool_calls": [{"id": "c1", "type": "function",
+                                "function": {"name": "write_file", "arguments": args}}]}}]})
+        return _FakeResp({"choices": [{"message": {"role": "assistant", "content": "done"}}]})
+    return fake_post
+
+
+def test_devagent_autorolls_back_on_test_failure(tmp_path, monkeypatch):
+    monkeypatch.setenv("JARVIS_ENABLE_DEVAGENT", "1")
+    monkeypatch.setattr(devagent, "REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(deepseek.config, "DEEPSEEK_API_KEY", "sk-x")
+    monkeypatch.setattr(devagent, "_git_diff", lambda: "")
+    # Tests fail after the write, then pass once it's rolled back.
+    seq = iter([{"passed": False, "output": "boom"}, {"passed": True, "output": "ok"}])
+    monkeypatch.setattr(devagent, "_run_tests", lambda: next(seq))
+    monkeypatch.setattr(deepseek.requests, "post", _drive_write("def broken(:\n", tmp_path))
+
+    out = devagent.develop("write a broken file")
+    assert out["rolled_back"] is True
+    assert out["tests_after_rollback"]["passed"] is True
+    assert not (tmp_path / "module.py").exists()   # new file removed on rollback
+
+
+def test_devagent_manual_rollback_restores_original(tmp_path, monkeypatch):
+    monkeypatch.setenv("JARVIS_ENABLE_DEVAGENT", "1")
+    monkeypatch.setattr(devagent, "REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(deepseek.config, "DEEPSEEK_API_KEY", "sk-x")
+    monkeypatch.setattr(devagent, "_git_diff", lambda: "")
+    monkeypatch.setattr(devagent, "_run_tests", lambda: {"passed": True, "output": "ok"})
+    (tmp_path / "module.py").write_text("ORIGINAL\n")          # pre-existing file
+    monkeypatch.setattr(deepseek.requests, "post", _drive_write("CHANGED\n", tmp_path))
+
+    out = devagent.develop("change module.py")
+    assert out["rolled_back"] is False and out["can_rollback"] is True
+    assert (tmp_path / "module.py").read_text() == "CHANGED\n"
+    # Manual rollback restores the previous version.
+    res = devagent.rollback_last()
+    assert "module.py" in res["restored"]
+    assert (tmp_path / "module.py").read_text() == "ORIGINAL\n"
+
+
 # ── Stocks (tracking + TimesFM/statistical forecast) ───────────────────────
 def test_stooq_symbol_mapping():
     assert stocks._stooq_symbol("AAPL") == "aapl.us"
