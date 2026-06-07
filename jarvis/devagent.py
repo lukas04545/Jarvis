@@ -42,14 +42,48 @@ def enabled() -> bool:
     return os.environ.get("JARVIS_ENABLE_DEVAGENT") == "1"
 
 
-def _safe(rel: str) -> str:
-    """Resolve a repo-relative path, rejecting traversal / blocked targets."""
-    rel = (rel or "").strip().lstrip("/")
-    p = os.path.normpath(os.path.join(REPO_ROOT, rel))
-    if p != REPO_ROOT and not p.startswith(REPO_ROOT + os.sep):
-        raise ValueError("path escapes project root")
-    parts = set(os.path.relpath(p, REPO_ROOT).split(os.sep))
-    if parts & _BLOCKED_DIRS:
+def _extra_roots() -> List[str]:
+    """Additional workspace directories the operator opted into via env.
+
+    JARVIS_DEV_ROOTS is a comma/colon-separated list of absolute directories the
+    agent may also work in (e.g. other projects on the phone). The filesystem
+    root '/' is refused — grant specific folders, not the whole device.
+    """
+    import re
+    out = []
+    for part in re.split(r"[,:]", os.environ.get("JARVIS_DEV_ROOTS", "")):
+        part = part.strip()
+        if part and part != "/" and os.path.isdir(part):
+            out.append(os.path.normpath(os.path.abspath(part)))
+    return out
+
+
+def _allowed_roots() -> List[str]:
+    return [REPO_ROOT] + _extra_roots()
+
+
+def _display(p: str) -> str:
+    """Repo-relative path for files inside the repo, else the absolute path."""
+    if p == REPO_ROOT or p.startswith(REPO_ROOT + os.sep):
+        return os.path.relpath(p, REPO_ROOT)
+    return p
+
+
+def _safe(path: str) -> str:
+    """Resolve a path inside an allowed workspace root; reject the rest.
+
+    Accepts a repo-relative path or an absolute path. Always blocks ``.git``,
+    virtualenvs, caches and secret files — anywhere — so rollback stays intact
+    and credentials are never touched.
+    """
+    path = (path or "").strip()
+    if os.path.isabs(path):
+        p = os.path.normpath(path)
+    else:
+        p = os.path.normpath(os.path.join(REPO_ROOT, path))
+    if not any(p == r or p.startswith(r + os.sep) for r in _allowed_roots()):
+        raise ValueError("path is outside the allowed workspace roots")
+    if set(p.split(os.sep)) & _BLOCKED_DIRS:
         raise ValueError("blocked directory")
     if os.path.basename(p) in _BLOCKED_FILES:
         raise ValueError("blocked file")
@@ -59,16 +93,16 @@ def _safe(rel: str) -> str:
 # ── tool implementations (read-only helpers) ───────────────────────────────
 def _list_files(pattern: str = "**/*.py") -> List[str]:
     out = []
-    for f in _glob.glob(os.path.join(REPO_ROOT, pattern), recursive=True):
-        if not os.path.isfile(f):
-            continue
-        try:
-            rel = os.path.relpath(f, REPO_ROOT)
-            _safe(rel)
-        except ValueError:
-            continue
-        out.append(rel)
-    return sorted(out)[:250]
+    for root in _allowed_roots():
+        for f in _glob.glob(os.path.join(root, pattern), recursive=True):
+            if not os.path.isfile(f):
+                continue
+            try:
+                _safe(f)
+            except ValueError:
+                continue
+            out.append(_display(f))
+    return sorted(set(out))[:250]
 
 
 def _read_file(path: str = "") -> str:
@@ -85,10 +119,9 @@ def _read_raw(p: str) -> str | None:
 
 
 def _restore(checkpoint: Dict[str, str | None]) -> List[str]:
-    """Restore files from a checkpoint: rewrite originals, delete new files."""
+    """Restore files from a checkpoint (keys are absolute paths)."""
     restored = []
-    for rel, original in checkpoint.items():
-        p = os.path.join(REPO_ROOT, rel)
+    for p, original in checkpoint.items():
         try:
             if original is None:
                 if os.path.exists(p):
@@ -96,7 +129,7 @@ def _restore(checkpoint: Dict[str, str | None]) -> List[str]:
             else:
                 with open(p, "w", encoding="utf-8") as fh:
                     fh.write(original)
-            restored.append(rel)
+            restored.append(_display(p))
         except OSError:
             continue
     return restored
@@ -164,15 +197,19 @@ _SYSTEM = (
     "correct, idiomatic changes that match the surrounding code. Workflow: explore "
     "with list_files/read_file FIRST, then write_file your changes, then run_tests "
     "and fix any failures, iterating until green. If you get stuck or break the "
-    "build, call revert_all to roll back and start over. Keep everything inside the "
-    "project; never touch secrets or .git. When done, reply with a concise summary "
-    "of what you changed and why (no tool call). NOTE: if the suite is still failing "
-    "at the end, your changes will be automatically rolled back."
+    "build, call revert_all to roll back and start over. You work in the Jarvis "
+    "repo and any extra workspace roots the operator configured — use absolute "
+    "paths for files outside the repo. Never touch secrets or .git. When done, "
+    "reply with a concise summary of what you changed and why (no tool call). "
+    "NOTE: if the suite is still failing at the end, your changes are rolled back."
 )
 
 
 def status() -> Dict:
-    return {"enabled": enabled(), "ai_online": runtime.ai_online(), "root": os.path.basename(REPO_ROOT)}
+    extra = _extra_roots()
+    return {"enabled": enabled(), "ai_online": runtime.ai_online(),
+            "root": os.path.basename(REPO_ROOT),
+            "extra_roots": extra, "workspace_count": 1 + len(extra)}
 
 
 def develop(task: str, max_rounds: int = 14) -> Dict:
@@ -207,12 +244,12 @@ def develop(task: str, max_rounds: int = 14) -> Dict:
         p = _safe(path)
         if len(content) > MAX_WRITE:
             return {"error": "content too large"}
-        rel = os.path.relpath(p, REPO_ROOT)
-        if rel not in checkpoint:                     # snapshot before first write
-            checkpoint[rel] = _read_raw(p) if os.path.exists(p) else None
+        if p not in checkpoint:                       # snapshot before first write
+            checkpoint[p] = _read_raw(p) if os.path.exists(p) else None
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, "w", encoding="utf-8") as fh:
             fh.write(content)
+        rel = _display(p)
         changed.add(rel)
         rec("write_file", rel)
         return {"written": rel, "bytes": len(content)}

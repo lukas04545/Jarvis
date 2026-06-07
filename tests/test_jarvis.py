@@ -727,6 +727,31 @@ def test_devagent_write_blocks_escape(tmp_path, monkeypatch):
         devagent._safe("../../evil.py")
 
 
+def test_devagent_extra_workspace_roots(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"; repo.mkdir()
+    ws = tmp_path / "workspace"; ws.mkdir()
+    outside = tmp_path / "private"; outside.mkdir()
+    monkeypatch.setattr(devagent, "REPO_ROOT", str(repo))
+    monkeypatch.setenv("JARVIS_DEV_ROOTS", str(ws))
+
+    (ws / "a.py").write_text("x")
+    assert devagent._safe(str(ws / "a.py")).endswith("a.py")   # granted workspace OK
+    with pytest.raises(ValueError):                            # not granted → rejected
+        devagent._safe(str(outside / "secret.txt"))
+    # .git and secret files are blocked even inside a granted workspace
+    with pytest.raises(ValueError):
+        devagent._safe(str(ws / ".git" / "config"))
+    with pytest.raises(ValueError):
+        devagent._safe(str(ws / ".env"))
+    assert str(ws) in devagent.status()["extra_roots"]
+    assert devagent.status()["workspace_count"] == 2
+
+
+def test_devagent_refuses_filesystem_root(monkeypatch):
+    monkeypatch.setenv("JARVIS_DEV_ROOTS", "/")
+    assert devagent._extra_roots() == []      # '/' is never accepted
+
+
 def _drive_write(content, tmp_path):
     """Build a fake DeepSeek that writes module.py then finishes."""
     state = {"n": 0}

@@ -719,8 +719,12 @@
     try {
       const s = await getJSON("/api/dev");
       const el = $("dev-status");
-      if (s.enabled) { el.textContent = `● ENABLED · ${s.root}`; el.style.color = "var(--green)"; }
+      const ws = s.workspace_count > 1 ? ` · ${s.workspace_count} workspaces` : "";
+      if (s.enabled) { el.textContent = `● ENABLED · ${s.root}${ws}`; el.style.color = "var(--green)"; }
       else { el.textContent = "● DISABLED (set JARVIS_ENABLE_DEVAGENT=1)"; el.style.color = "var(--amber)"; }
+      const warn = $("dev-warn");
+      if (warn && s.extra_roots && s.extra_roots.length)
+        warn.innerHTML = `⚠ Workspace: <b>Jarvis repo</b> + ${s.extra_roots.map((r) => `<code>${esc(r)}</code>`).join(", ")}. The agent edits files here and runs the tests; <code>.git</code>/secrets are always protected. Local developer use only.`;
     } catch (e) { /* ignore */ }
   }
   async function runDev(task) {

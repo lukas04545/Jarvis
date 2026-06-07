@@ -253,10 +253,14 @@ covert collection tool.
   its owner has not made public is unauthorised and unlawful; this tool provides
   no such capability.
 - The **DEV agent** can modify project files, so it is **off by default**
-  (`JARVIS_ENABLE_DEVAGENT=1` to enable) and **confined to the repository** —
-  `.git`, virtualenvs, caches and secret files are blocked, and it can only run
-  the bundled `pytest` and read-only `git`, never arbitrary shell. Run it on
-  your own machine; don't expose that endpoint publicly.
+  (`JARVIS_ENABLE_DEVAGENT=1` to enable) and **confined to a workspace** — the
+  Jarvis repo plus any directories you explicitly grant via `JARVIS_DEV_ROOTS`
+  (comma/colon-separated absolute paths; `/` is refused). `.git`, virtualenvs,
+  caches and secret files are blocked **everywhere**, and it can only run the
+  bundled `pytest` and read-only `git`, never arbitrary shell. It is deliberately
+  **not** given whole-device access — an autonomous code-writing agent loose on
+  every file is a data-loss and privacy risk. Run it locally; don't expose the
+  endpoint publicly.
 - The only optional key is **DeepSeek** (the AI core); it is stored server-side
   only (`.jarvis_secrets.json`, chmod 600, gitignored) and never sent back to
   the browser.

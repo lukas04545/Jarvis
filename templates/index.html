@@ -233,7 +233,7 @@
         <button id="dev-run" class="btn-primary">▶ DEVELOP</button>
         <button id="dev-rollback" class="btn-ghost" title="undo the last applied change">↺ ROLLBACK</button>
       </div>
-      <p class="dev-note" id="dev-warn">⚠ The DEV agent edits files in the Jarvis project and runs the test suite. It is confined to the repo (no secrets/.git) and disabled unless <code>JARVIS_ENABLE_DEVAGENT=1</code>. Local developer use only.</p>
+      <p class="dev-note" id="dev-warn">⚠ The DEV agent edits files in the Jarvis project and runs the test suite. Confined to the repo (plus any folders you grant via <code>JARVIS_DEV_ROOTS</code>); <code>.git</code>/secrets always protected. Disabled unless <code>JARVIS_ENABLE_DEVAGENT=1</code>. Local developer use only.</p>
       <div class="dev-body" id="dev-body">
         <div class="loading">Give the agent a task to read the codebase, implement a change, and run the tests.</div>
       </div>
