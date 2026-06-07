@@ -110,6 +110,12 @@ def _read_file(path: str = "") -> str:
         return fh.read()[:MAX_READ]
 
 
+def _make_dir(path: str = "") -> str:
+    p = _safe(path)
+    os.makedirs(p, exist_ok=True)
+    return p
+
+
 def _read_raw(p: str) -> str | None:
     try:
         with open(p, "r", encoding="utf-8") as fh:
@@ -173,8 +179,15 @@ SCHEMA: List[Dict] = [
         "parameters": {"type": "object", "properties": {
             "path": {"type": "string"}}, "required": ["path"]}}},
     {"type": "function", "function": {
+        "name": "make_dir",
+        "description": "Create a directory (and parents) within an allowed workspace root. "
+                       "Use absolute paths to scaffold a NEW project outside the Jarvis repo.",
+        "parameters": {"type": "object", "properties": {
+            "path": {"type": "string"}}, "required": ["path"]}}},
+    {"type": "function", "function": {
         "name": "write_file",
-        "description": "Create or overwrite a file in the project (confined to the repo).",
+        "description": "Create or overwrite a file within an allowed workspace root. "
+                       "Parent directories are created automatically.",
         "parameters": {"type": "object", "properties": {
             "path": {"type": "string"}, "content": {"type": "string"}},
             "required": ["path", "content"]}}},
@@ -199,9 +212,12 @@ _SYSTEM = (
     "and fix any failures, iterating until green. If you get stuck or break the "
     "build, call revert_all to roll back and start over. You work in the Jarvis "
     "repo and any extra workspace roots the operator configured — use absolute "
-    "paths for files outside the repo. Never touch secrets or .git. When done, "
-    "reply with a concise summary of what you changed and why (no tool call). "
-    "NOTE: if the suite is still failing at the end, your changes are rolled back."
+    "paths for files outside the repo. To scaffold a NEW project outside Jarvis, "
+    "make_dir the project folder under a workspace root, then write_file its "
+    "files. Never touch secrets or .git. When done, reply with a concise summary "
+    "of what you changed and why (no tool call). NOTE: the Jarvis test suite only "
+    "gates changes to the Jarvis repo; if it fails after you edit Jarvis files, "
+    "those changes are rolled back."
 )
 
 
@@ -225,6 +241,7 @@ def develop(task: str, max_rounds: int = 14) -> Dict:
 
     actions: List[Dict] = []
     changed: set = set()
+    created_dirs: set = set()
     # Checkpoint: first time a path is touched, remember its prior state so the
     # change-set can be rolled back if the tests fail.
     checkpoint: Dict[str, str | None] = {}
@@ -239,6 +256,12 @@ def develop(task: str, max_rounds: int = 14) -> Dict:
     def read_file(path: str = ""):
         rec("read_file", path)
         return _read_file(path)
+
+    def make_dir(path: str = ""):
+        p = _make_dir(path)
+        created_dirs.add(p)
+        rec("make_dir", _display(p))
+        return {"created": _display(p)}
 
     def write_file(path: str = "", content: str = ""):
         p = _safe(path)
@@ -269,8 +292,9 @@ def develop(task: str, max_rounds: int = 14) -> Dict:
         rec("revert_all", f"{len(restored)} files")
         return {"reverted": restored}
 
-    impls = {"list_files": list_files, "read_file": read_file, "write_file": write_file,
-             "run_tests": run_tests, "git_diff": git_diff, "revert_all": revert_all}
+    impls = {"list_files": list_files, "read_file": read_file, "make_dir": make_dir,
+             "write_file": write_file, "run_tests": run_tests, "git_diff": git_diff,
+             "revert_all": revert_all}
 
     messages = [{"role": "system", "content": _SYSTEM}, {"role": "user", "content": "TASK: " + task}]
     try:
@@ -280,12 +304,21 @@ def develop(task: str, max_rounds: int = 14) -> Dict:
         return {"error": str(exc), "actions": actions, "files_changed": sorted(changed)}
 
     changed_list = sorted(changed)
-    tests = _run_tests() if changed else None
+    # The Jarvis test suite only gates changes to the Jarvis repo itself — a new
+    # external project in a workspace root is NOT rolled back if Jarvis tests fail.
+    repo_touched = any(p == REPO_ROOT or p.startswith(REPO_ROOT + os.sep) for p in checkpoint)
+    tests = _run_tests() if repo_touched else None
     rolled_back = False
     tests_after_rollback = None
-    if changed and tests and not tests.get("passed"):
-        # The change-set is broken — restore the previous working versions.
+    if repo_touched and tests and not tests.get("passed"):
+        # The Jarvis change-set is broken — restore the previous working versions.
         _restore(checkpoint)
+        for d in sorted(created_dirs, key=len, reverse=True):
+            try:
+                if os.path.isdir(d) and not os.listdir(d):
+                    os.rmdir(d)
+            except OSError:
+                pass
         rec("auto_rollback", f"{len(checkpoint)} files restored")
         rolled_back = True
         tests_after_rollback = _run_tests()
@@ -302,8 +335,10 @@ def develop(task: str, max_rounds: int = 14) -> Dict:
         "summary": result["text"],
         "actions": actions,
         "files_changed": changed_list,
-        "diff": _git_diff(),
+        "dirs_created": sorted(_display(d) for d in created_dirs),
+        "diff": _git_diff() if repo_touched else "",
         "tests": tests,
+        "tests_gated": repo_touched,
         "rolled_back": rolled_back,
         "tests_after_rollback": tests_after_rollback,
         "can_rollback": bool(changed_list) and not rolled_back,

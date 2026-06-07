@@ -752,6 +752,51 @@ def test_devagent_refuses_filesystem_root(monkeypatch):
     assert devagent._extra_roots() == []      # '/' is never accepted
 
 
+def test_devagent_make_dir_confined(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"; repo.mkdir()
+    ws = tmp_path / "ws"; ws.mkdir()
+    monkeypatch.setattr(devagent, "REPO_ROOT", str(repo))
+    monkeypatch.setenv("JARVIS_DEV_ROOTS", str(ws))
+    made = devagent._make_dir(str(ws / "newproj" / "src"))
+    assert os.path.isdir(made)
+    with pytest.raises(ValueError):                       # outside granted roots
+        devagent._make_dir(str(tmp_path / "elsewhere"))
+
+
+def test_devagent_external_project_not_gated_by_jarvis_tests(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"; repo.mkdir()
+    ws = tmp_path / "ws"; ws.mkdir()
+    monkeypatch.setenv("JARVIS_ENABLE_DEVAGENT", "1")
+    monkeypatch.setattr(devagent, "REPO_ROOT", str(repo))
+    monkeypatch.setenv("JARVIS_DEV_ROOTS", str(ws))
+    monkeypatch.setattr(deepseek.config, "DEEPSEEK_API_KEY", "sk-x")
+
+    def boom():
+        raise AssertionError("Jarvis tests must not run for external-only changes")
+    monkeypatch.setattr(devagent, "_run_tests", boom)
+
+    proj = str(ws / "newapp")
+    js = __import__("json")
+    seq = iter([("make_dir", {"path": proj}),
+                ("write_file", {"path": proj + "/main.py", "content": "print('hi')\n"})])
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        try:
+            name, args = next(seq)
+            return _FakeResp({"choices": [{"message": {"role": "assistant", "content": None,
+                "tool_calls": [{"id": "c", "type": "function",
+                                "function": {"name": name, "arguments": js.dumps(args)}}]}}]})
+        except StopIteration:
+            return _FakeResp({"choices": [{"message": {"role": "assistant", "content": "scaffolded newapp"}}]})
+    monkeypatch.setattr(deepseek.requests, "post", fake_post)
+
+    out = devagent.develop("create a new app in the workspace")
+    assert out["tests_gated"] is False and out["rolled_back"] is False and out["tests"] is None
+    assert os.path.isfile(proj + "/main.py")
+    assert any("main.py" in f for f in out["files_changed"])
+    assert any("newapp" in d for d in out["dirs_created"])
+
+
 def _drive_write(content, tmp_path):
     """Build a fake DeepSeek that writes module.py then finishes."""
     state = {"n": 0}

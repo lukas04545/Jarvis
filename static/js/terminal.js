@@ -714,7 +714,8 @@
 
   // ── DEV AGENT (self-coding harness) ───────────────────────────────────
   let devReady = false, devBusy = false;
-  const DEV_ICON = { list_files: "▤", read_file: "▦", write_file: "✎", run_tests: "✓", git_diff: "Δ" };
+  const DEV_ICON = { list_files: "▤", read_file: "▦", make_dir: "✚", write_file: "✎",
+                     run_tests: "✓", git_diff: "Δ", revert_all: "↺", auto_rollback: "⟲" };
   async function loadDevStatus() {
     try {
       const s = await getJSON("/api/dev");
@@ -745,15 +746,19 @@
       const files = (d.files_changed || []).map((f) => `<span class="kind-chip">${esc(f)}</span>`).join("") || "<span class='news-src'>none</span>";
       const tests = d.tests
         ? `<span class="${d.tests.passed ? "up" : "down"}">${d.tests.passed ? "✓ tests pass" : "✕ tests fail"}</span>` : "<span class='news-src'>not run</span>";
+      const dirs = (d.dirs_created || []).map((f) => `<span class="kind-chip">${esc(f)}</span>`).join("");
       const banner = d.rolled_back
-        ? `<div class="dev-rollback-banner">⟲ CHANGES AUTO-ROLLED BACK — tests failed, restored the previous working version` +
+        ? `<div class="dev-rollback-banner">⟲ CHANGES AUTO-ROLLED BACK — Jarvis tests failed, restored the previous working version` +
           (d.tests_after_rollback ? ` (now ${d.tests_after_rollback.passed ? "✓ green" : "✕ still failing"})` : "") + `</div>`
-        : (d.files_changed && d.files_changed.length ? `<div class="dev-applied-banner">✓ CHANGES APPLIED — use ↺ ROLLBACK to undo</div>` : "");
+        : (d.files_changed && d.files_changed.length
+            ? `<div class="dev-applied-banner">✓ CHANGES APPLIED${d.tests_gated ? "" : " (external project — not gated by Jarvis tests)"} — use ↺ ROLLBACK to undo</div>`
+            : "");
       body.innerHTML =
         banner +
         `<div class="dev-summary"><div class="vision-head">◈ SUMMARY</div>${esc(d.summary || "").replace(/\n/g, "<br>")}</div>` +
+        (dirs ? `<div class="kv"><span>DIRS CREATED</span><b>${dirs}</b></div>` : "") +
         `<div class="kv"><span>FILES CHANGED</span><b>${files}</b></div>` +
-        `<div class="kv"><span>TESTS</span><b>${tests}</b></div>` +
+        `<div class="kv"><span>TESTS</span><b>${d.tests_gated ? tests : "<span class='news-src'>n/a (outside Jarvis)</span>"}</b></div>` +
         (d.diff ? `<div class="dev-sec" style="margin-top:8px">DIFF</div><pre class="dev-diff">${esc(d.diff)}</pre>` : "") +
         `<div class="dev-sec" style="margin-top:8px">TRANSCRIPT (${(d.actions || []).length} steps)</div>${steps}`;
       if (window.JarvisBrain) JarvisBrain.reload();
