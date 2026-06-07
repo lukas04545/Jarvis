@@ -45,6 +45,7 @@
     <button class="tab" data-view="forecast">⊹ ORACLE · FORECAST</button>
     <button class="tab" data-view="stocks">⊞ STOCKS</button>
     <button class="tab" data-view="agents">⌬ AGENT MESH</button>
+    <button class="tab" data-view="dev">⌥ DEV AGENT</button>
     <button class="tab" data-view="brain">✺ BRAIN</button>
     <button class="tab" data-view="recon">⊠ RECON</button>
     <button class="tab" data-view="device">⊟ DEVICE SENSORS</button>
@@ -211,6 +212,29 @@
       <div class="agents-plan" id="agent-plan"></div>
       <div class="agents-grid" id="agent-grid">
         <div class="loading">Idle. Deploy the desk against a tasking to see each subagent report, then the Director's fused briefing.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ VIEW: DEV AGENT (self-coding harness) ════════════════════════════ -->
+  <section class="view dev-view" id="view-dev">
+    <div class="dev-agent-main">
+      <div class="agents-head">
+        <div>
+          <div class="forecast-title">⌥ DEV AGENT</div>
+          <div class="forecast-sub" id="dev-sub">an AI engineer that reads, writes & tests the Jarvis code</div>
+        </div>
+        <span class="panel-meta" id="dev-status">checking…</span>
+      </div>
+      <div class="recon-input">
+        <span class="prompt">DEV&gt;</span>
+        <input id="dev-task" autocomplete="off" spellcheck="false"
+               placeholder="describe a change — e.g. 'add a /api/ping endpoint returning {ok:true}'…" />
+        <button id="dev-run" class="btn-primary">▶ DEVELOP</button>
+      </div>
+      <p class="dev-note" id="dev-warn">⚠ The DEV agent edits files in the Jarvis project and runs the test suite. It is confined to the repo (no secrets/.git) and disabled unless <code>JARVIS_ENABLE_DEVAGENT=1</code>. Local developer use only.</p>
+      <div class="dev-body" id="dev-body">
+        <div class="loading">Give the agent a task to read the codebase, implement a change, and run the tests.</div>
       </div>
     </div>
   </section>

@@ -27,6 +27,7 @@ from jarvis import (
     briefing,
     deepseek,
     device,
+    devagent,
     forecast,
     gdelt,
     ingest,
@@ -189,6 +190,21 @@ def api_set_device():
     # the SENTINEL agent can read it. Screen/audio are never sent (see device.py).
     body = request.get_json(silent=True) or {}
     return jsonify({"ok": True, "stored": device.set_device(body)})
+
+
+@app.route("/api/dev", methods=["GET"])
+def api_dev_status():
+    return jsonify(devagent.status())
+
+
+@app.route("/api/dev", methods=["POST"])
+def api_dev_run():
+    task = ((request.get_json(silent=True) or {}).get("task") or "").strip()
+    if not task:
+        return jsonify({"error": "empty task"}), 400
+    result = devagent.develop(task)
+    code = 403 if result.get("error", "").startswith("DEV agent is disabled") else 200
+    return jsonify(result), code
 
 
 @app.route("/api/agents", methods=["POST"])

@@ -192,6 +192,7 @@
     "  BRIEF           generate an AI situational briefing",
     "  FORECAST        run the ORACLE — predict future events",
     "  AGENTS <task>   deploy the multi-agent mesh on a tasking",
+    "  DEV <task>      the self-coding agent develops Jarvis (local, gated)",
     "  RECON <email>   email-exposure OSINT (authorised use only)",
     "  STOCK <ticker>  track + forecast a stock (TimesFM / statistical)",
     "  BRAIN           open the neural memory graph",
@@ -273,6 +274,12 @@
           addLine("sys", rest ? "Deploying agent mesh…" : "Opening agent mesh — enter a tasking.");
           showView("agents");
           if (rest) { $("agent-query").value = rest; setTimeout(() => runAgents(rest), 200); }
+          return;
+        }
+        // DEV <task> → self-coding agent.
+        if (cmd === "DEV" || cmd.startsWith("DEV ")) {
+          showView("dev");
+          if (rest) { $("dev-task").value = rest; setTimeout(() => runDev(rest), 200); }
           return;
         }
         // STOCK <ticker> → price forecast.
@@ -372,6 +379,10 @@
     if (name === "stocks") {
       if (!stocksReady) { stocksReady = true; loadWatchlist(); runStock("AAPL"); }
       else if (lastStock) setTimeout(() => drawStockChart(lastStock), 50);
+    }
+    if (name === "dev") {
+      if (!devReady) { devReady = true; loadDevStatus(); }
+      if (!window.matchMedia("(pointer: coarse)").matches) setTimeout(() => $("dev-task").focus(), 50);
     }
   }
   $("tabs").addEventListener("click", (e) => {
@@ -700,6 +711,51 @@
   $("agent-query").addEventListener("keydown", (e) => {
     if (e.key === "Enter") runAgents();
   });
+
+  // ── DEV AGENT (self-coding harness) ───────────────────────────────────
+  let devReady = false, devBusy = false;
+  const DEV_ICON = { list_files: "▤", read_file: "▦", write_file: "✎", run_tests: "✓", git_diff: "Δ" };
+  async function loadDevStatus() {
+    try {
+      const s = await getJSON("/api/dev");
+      const el = $("dev-status");
+      if (s.enabled) { el.textContent = `● ENABLED · ${s.root}`; el.style.color = "var(--green)"; }
+      else { el.textContent = "● DISABLED (set JARVIS_ENABLE_DEVAGENT=1)"; el.style.color = "var(--amber)"; }
+    } catch (e) { /* ignore */ }
+  }
+  async function runDev(task) {
+    if (devBusy) return;
+    const t = (task || $("dev-task").value).trim();
+    if (!t) return;
+    devBusy = true; $("dev-run").disabled = true;
+    const body = $("dev-body");
+    body.innerHTML = '<div class="loading">DEV agent working — reading code, writing changes, running tests…</div>';
+    try {
+      const d = await (await fetch("/api/dev", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task: t }),
+      })).json();
+      if (d.error) { body.innerHTML = `<div class="err">${esc(d.error)}</div>`; return; }
+      const steps = (d.actions || []).map((a) =>
+        `<div class="dev-step"><span class="dev-ic">${DEV_ICON[a.tool] || "•"}</span> <b>${esc(a.tool)}</b> <span class="news-src">${esc(a.detail)}</span></div>`).join("");
+      const files = (d.files_changed || []).map((f) => `<span class="kind-chip">${esc(f)}</span>`).join("") || "<span class='news-src'>none</span>";
+      const tests = d.tests
+        ? `<span class="${d.tests.passed ? "up" : "down"}">${d.tests.passed ? "✓ tests pass" : "✕ tests fail"}</span>` : "<span class='news-src'>not run</span>";
+      body.innerHTML =
+        `<div class="dev-summary"><div class="vision-head">◈ SUMMARY</div>${esc(d.summary || "").replace(/\n/g, "<br>")}</div>` +
+        `<div class="kv"><span>FILES CHANGED</span><b>${files}</b></div>` +
+        `<div class="kv"><span>TESTS</span><b>${tests}</b></div>` +
+        (d.diff ? `<div class="dev-sec" style="margin-top:8px">DIFF</div><pre class="dev-diff">${esc(d.diff)}</pre>` : "") +
+        `<div class="dev-sec" style="margin-top:8px">TRANSCRIPT (${(d.actions || []).length} steps)</div>${steps}`;
+      if (window.JarvisBrain) JarvisBrain.reload();
+    } catch (e) {
+      body.innerHTML = `<div class="err">dev agent failed: ${esc(e.message)}</div>`;
+    } finally {
+      devBusy = false; $("dev-run").disabled = false;
+    }
+  }
+  $("dev-run").addEventListener("click", () => runDev());
+  $("dev-task").addEventListener("keydown", (e) => { if (e.key === "Enter") runDev(); });
 
   // ── RECON (email-exposure OSINT) ──────────────────────────────────────
   function reconGate() {

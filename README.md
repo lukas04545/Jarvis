@@ -30,6 +30,7 @@
 | **⊹ ORACLE — event prediction** | A forecasting engine that fuses every signal into a quantitative vector, then produces **probabilistic predictions of future events** — each with probability, confidence, time horizon, drivers, and confirm/refute indicators. Heuristic baseline + DeepSeek structured forecasts. |
 | **Maximised data ingestion** | ~24 news feeds (wires, finance, conflict, cyber, space, science, health) pulled **concurrently**, plus **markets** (CoinGecko crypto + Stooq indices/commodities/FX) and **GDELT** global media volume & tone. |
 | **⊞ Stocks (price forecast)** | Track any ticker (keyless Stooq history) and **predict prices with Google TimesFM** (time-series foundation model) when installed, or a built-in statistical model otherwise. Interactive chart: history + forecast path with an ~80% confidence band, a watchlist, and expected-move stats. |
+| **⌥ DEV Agent (self-coding)** | A DeepSeek-driven coding agent that can **read the codebase, write changes, run the test suite, and iterate** — it can keep developing Jarvis itself. Strictly confined to the repo (no `.git`/secrets) and **disabled unless `JARVIS_ENABLE_DEVAGENT=1`**; a local developer tool. See [Ethics & scope](#ethics--scope). |
 | **⌬ Agent Mesh** | A multi-agent harness: Director J.A.R.V.I.S. routes a tasking to **13 specialist subagents** (GEOINT, ECONINT, GEOPHYS, CYBER, ORACLE, OSINT, MEDINT, ENERGY, CLIMATE, SENTINEL, REDCELL, RECON, CORTEX), each with its own persona and data tools, run **concurrently** over DeepSeek and streamed live (SSE) — then fused into one attributed briefing. |
 | **⊟ Device Sensors** | Consent-gated access to the operator's **own** device via standard browser APIs: memory/hardware/screen/network/power telemetry, **screen capture** (`getDisplayMedia`, frames stay local), and **voice input** (Web Speech API → JARVIS) plus a local input-activity meter. Telemetry syncs to the **SENTINEL** agent. See [Ethics & scope](#ethics--scope). |
 | **👁 JARVIS Vision** | Makes JARVIS *see* the shared screen — **on-device** OCR (Tesseract.js) extracts the on-screen text and a pixel-level visual summary (resolution, theme, dominant colour); the image never leaves the device. Press **ASK JARVIS** to send the extracted text to the AI for analysis. Multi-language (EN/DE/ES/FR) for both speech-to-text and OCR. |
@@ -131,6 +132,8 @@ jarvis/
   signals.py            quantitative signal vector + momentum + anomalies
   forecast.py           ORACLE — heuristic + DeepSeek event predictions
   agents.py             multi-agent harness (Director + 13 specialist subagents)
+  devagent.py           self-coding agent (repo-confined file tools + tests)
+  braintools.py         brain tools exposed to DeepSeek (recall/save/stats)
   memory.py             persistent neural memory (neurons + synapses)
   ingest.py             news→brain learning loop (scrape → DeepSeek → neurons)
   osint.py              email-exposure recon (holehe + breach metadata)
@@ -249,6 +252,11 @@ covert collection tool.
   **not** scan, probe, or access unsecured/private cameras. Accessing a device
   its owner has not made public is unauthorised and unlawful; this tool provides
   no such capability.
+- The **DEV agent** can modify project files, so it is **off by default**
+  (`JARVIS_ENABLE_DEVAGENT=1` to enable) and **confined to the repository** —
+  `.git`, virtualenvs, caches and secret files are blocked, and it can only run
+  the bundled `pytest` and read-only `git`, never arbitrary shell. Run it on
+  your own machine; don't expose that endpoint publicly.
 - The only optional key is **DeepSeek** (the AI core); it is stored server-side
   only (`.jarvis_secrets.json`, chmod 600, gitignored) and never sent back to
   the browser.

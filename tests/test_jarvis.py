@@ -11,8 +11,8 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from jarvis import (  # noqa: E402
-    agents, braintools, deepseek, device, fallback, forecast, ingest, memory, news,
-    osint, runtime, signals, stocks, surveillance, webcams,
+    agents, braintools, deepseek, devagent, device, fallback, forecast, ingest, memory,
+    news, osint, runtime, signals, stocks, surveillance, webcams,
 )
 
 
@@ -673,6 +673,58 @@ def test_forecast_feeds_brain_memory_into_prompt(monkeypatch):
            "top_headlines": ["Eastern border tensions rise"]}
     forecast.ai_forecast(sig)
     assert "PRIOR INTELLIGENCE" in captured.get("p", "")
+
+
+# ── DEV agent (self-coding harness) ────────────────────────────────────────
+def test_devagent_path_safety(tmp_path, monkeypatch):
+    monkeypatch.setattr(devagent, "REPO_ROOT", str(tmp_path))
+    (tmp_path / "ok.py").write_text("x = 1")
+    assert devagent._safe("ok.py").endswith("ok.py")
+    for bad in ["../escape.txt", "../../etc/passwd", ".git/config", ".env",
+                ".jarvis_secrets.json", "jarvis/../../x"]:
+        with pytest.raises(ValueError):
+            devagent._safe(bad)
+
+
+def test_devagent_disabled_by_default(client, monkeypatch):
+    monkeypatch.delenv("JARVIS_ENABLE_DEVAGENT", raising=False)
+    assert devagent.enabled() is False
+    r = client.post("/api/dev", json={"task": "do something"})
+    assert r.status_code == 403 and "disabled" in r.get_json()["error"].lower()
+    assert devagent.status()["enabled"] is False
+
+
+def test_devagent_writes_and_iterates(tmp_path, monkeypatch):
+    # Enable + confine to a temp repo; drive a fake DeepSeek tool loop.
+    monkeypatch.setenv("JARVIS_ENABLE_DEVAGENT", "1")
+    monkeypatch.setattr(devagent, "REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(deepseek.config, "DEEPSEEK_API_KEY", "sk-x")   # AI core online
+    monkeypatch.setattr(devagent, "_run_tests", lambda: {"passed": True, "output": "ok"})
+    monkeypatch.setattr(devagent, "_git_diff", lambda: "module.py | 1 +")
+    calls = {"n": 0}
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        calls["n"] += 1
+        if calls["n"] == 1:        # round 1: agent writes a file
+            return _FakeResp({"choices": [{"message": {"role": "assistant", "content": None,
+                "tool_calls": [{"id": "c1", "type": "function", "function": {
+                    "name": "write_file",
+                    "arguments": '{"path":"module.py","content":"def ping():\\n    return True\\n"}'}}]}}]})
+        return _FakeResp({"choices": [{"message": {"role": "assistant",
+            "content": "Added module.py with a ping() function."}}]})
+
+    monkeypatch.setattr(deepseek.requests, "post", fake_post)
+    out = devagent.develop("add a ping function")
+    assert (tmp_path / "module.py").read_text().startswith("def ping")
+    assert "module.py" in out["files_changed"]
+    assert any(a["tool"] == "write_file" for a in out["actions"])
+    assert out["tests"]["passed"] is True
+
+
+def test_devagent_write_blocks_escape(tmp_path, monkeypatch):
+    monkeypatch.setattr(devagent, "REPO_ROOT", str(tmp_path))
+    with pytest.raises(ValueError):
+        devagent._safe("../../evil.py")
 
 
 # ── Stocks (tracking + TimesFM/statistical forecast) ───────────────────────

@@ -439,6 +439,19 @@ body { display: flex; flex-direction: column; }
 .rec-classes { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
 .rec-classes span { font-size: 9px; color: var(--amber); border: 1px solid var(--amber-dim); padding: 0 4px; }
 
+/* ── DEV AGENT VIEW ────────────────────────────────────────────────────── */
+.dev-view { padding: 6px; }
+.dev-agent-main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--panel); border: 1px solid var(--grid-line); overflow: hidden; }
+.dev-agent-main .agents-head { border-bottom: 1px solid var(--amber-dim); }
+#dev-warn { margin: 0; padding: 8px 12px; border-bottom: 1px solid var(--grid-line); background: rgba(255,158,27,0.06); }
+.dev-body { flex: 1; overflow-y: auto; padding: 10px 12px; }
+.dev-summary { color: var(--text); font-size: 13px; line-height: 1.5; margin-bottom: 10px; }
+.dev-step { font-size: 11px; padding: 2px 0; color: var(--text-dim); }
+.dev-step b { color: var(--cyan); }
+.dev-ic { color: var(--amber); display: inline-block; width: 14px; }
+.dev-body .up { color: var(--green); } .dev-body .down { color: var(--red); }
+.dev-diff { background: var(--bg); border: 1px solid var(--grid-line); padding: 8px; font-size: 11px; color: var(--text-dim); overflow-x: auto; max-height: 180px; white-space: pre; }
+
 /* ── STOCKS VIEW ───────────────────────────────────────────────────────── */
 .stocks-view { padding: 6px; }
 .stocks-main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--panel); border: 1px solid var(--grid-line); overflow: hidden; }
