@@ -94,11 +94,12 @@ def _distill(items: List[Dict]) -> List[Dict]:
     prompt = (
         "You are an intelligence analyst. From these scraped news items, extract the "
         "key, durable intelligence as a JSON array (no prose) of objects "
-        '{"fact","tags","domain"} where fact is one concise factual statement '
-        "(<140 chars), tags is 2-5 lowercase keyword tags (entities, places, "
-        "themes), and domain is ONE of CONFLICT, MARKETS, POLITICS, DISASTER, "
-        "CYBER, TECH, SPACE, HEALTH, GENERAL. Merge duplicates; keep substantive "
-        "items only.\n\nNEWS:\n" + "\n".join(lines)
+        '{"fact","tags","domain","importance"} where fact is one concise factual '
+        "statement (<140 chars), tags is 2-5 lowercase keyword tags (entities, "
+        "places, themes), domain is ONE of CONFLICT, MARKETS, POLITICS, DISASTER, "
+        "CYBER, TECH, SPACE, HEALTH, GENERAL, and importance is an integer 1-10 "
+        "rating global significance (10 = world-changing, 1 = trivial). Merge "
+        "duplicates; keep substantive items only.\n\nNEWS:\n" + "\n".join(lines)
     )
     raw = deepseek.complete(
         [{"role": "system", "content": "You output only valid JSON arrays."},
@@ -109,10 +110,32 @@ def _distill(items: List[Dict]) -> List[Dict]:
     for o in _parse_json_array(raw):
         fact = str(o.get("fact", "")).strip()
         if fact:
+            try:
+                imp = max(1, min(10, int(o.get("importance", 5))))
+            except (TypeError, ValueError):
+                imp = 5
             out.append({"text": fact,
                         "tags": [str(t).lower() for t in (o.get("tags") or [])][:6],
-                        "domain": str(o.get("domain", "GENERAL")).upper()[:10]})
+                        "domain": str(o.get("domain", "GENERAL")).upper()[:10],
+                        "importance": imp})
     return out
+
+
+# Baseline importance by topic when DeepSeek isn't available to rate it.
+_TOPIC_WEIGHT = {"CONFLICT": 7, "DISASTER": 7, "POLITICS": 6, "MARKETS": 6,
+                 "HEALTH": 6, "CYBER": 6, "TECH": 5, "SPACE": 4, "GENERAL": 4}
+_HOT = ("war", "nuclear", "killed", "attack", "invasion", "crash", "collapse",
+        "emergency", "coup", "outbreak", "missile", "sanction")
+
+
+def _heuristic_weight(it: Dict) -> int:
+    w = _TOPIC_WEIGHT.get(it.get("topic", "GENERAL"), 5)
+    if it.get("region") == "Global":
+        w += 1
+    blob = (it.get("title", "") + " " + (it.get("body") or "")).lower()
+    if any(k in blob for k in _HOT):
+        w += 2
+    return max(1, min(10, w))
 
 
 # ── ingest cycle ───────────────────────────────────────────────────────────
@@ -132,7 +155,7 @@ def ingest_once(limit: int = 24) -> Dict:
 
     if facts:
         for f in facts:
-            if memory.add(f["text"], kind="news", tags=f["tags"],
+            if memory.add(f["text"], kind="news", tags=f["tags"], weight=f.get("importance", 5),
                           meta={"source": "DeepSeek synthesis", "topic": f.get("domain", "GENERAL")}):
                 count += 1
     else:
@@ -147,7 +170,7 @@ def ingest_once(limit: int = 24) -> Dict:
             meta = {"source": it.get("source", ""), "region": it.get("region", ""),
                     "topic": it.get("topic", ""), "link": it.get("link", ""),
                     "time": it.get("time", "")}
-            if memory.add(text, kind="news", tags=tags, meta=meta):
+            if memory.add(text, kind="news", tags=tags, weight=_heuristic_weight(it), meta=meta):
                 count += 1
 
     neurons = memory.stats()["neurons"]

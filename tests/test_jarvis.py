@@ -436,6 +436,31 @@ def test_memory_add_recall_and_edges():
     assert hits and any("border" in h["text"].lower() for h in hits)
 
 
+def test_memory_weight_is_clamped_and_strengthens():
+    nid = memory.add("Critical: nuclear test detected", kind="intel", weight=10)
+    memory.add("trivial note", weight=99)        # clamps to 10
+    memory.add("trivial note", weight=2)         # dedup keeps the higher weight
+    g = {n["text"]: n for n in memory.graph()["neurons"]}
+    assert g["Critical: nuclear test detected"]["weight"] == 10
+    assert g["trivial note"]["weight"] == 10     # max kept on dedup
+    # default importance when unspecified
+    memory.add("plain memory")
+    assert {n["text"]: n for n in memory.graph()["neurons"]}["plain memory"]["weight"] == 5
+
+
+def test_ingest_heuristic_weight_for_hot_news(monkeypatch):
+    monkeypatch.setattr(deepseek.config, "DEEPSEEK_API_KEY", "")   # raw path
+    monkeypatch.setattr(ingest.news, "get_news", lambda: {"items": [
+        {"title": "Missile attack kills dozens near capital", "topic": "CONFLICT", "region": "Global"},
+        {"title": "Local museum reopens after renovation", "topic": "GENERAL", "region": "Europe"},
+    ]})
+    ingest.ingest_once()
+    by = {n["text"].split(" —")[0]: n for n in memory.graph()["neurons"]}
+    hot = by["Missile attack kills dozens near capital"]["weight"]
+    mild = by["Local museum reopens after renovation"]["weight"]
+    assert hot >= 9 and hot > mild      # conflict + global + hot keywords → high
+
+
 def test_memory_persists_to_disk(tmp_path, monkeypatch):
     path = str(tmp_path / "b.json")
     monkeypatch.setattr(memory, "_PATH", path)

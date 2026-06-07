@@ -414,6 +414,8 @@ body { display: flex; flex-direction: column; }
 .brain-rail { width: 320px; flex-shrink: 0; background: var(--panel); border: 1px solid var(--grid-line); display: flex; flex-direction: column; overflow-y: auto; }
 .brain-rail #brain-input { width: 100%; background: var(--bg); border: 1px solid var(--grid-line); color: var(--amber); font-family: var(--font); font-size: 13px; padding: 7px 9px; outline: none; }
 .brain-mem { color: var(--text); font-size: 13px; line-height: 1.45; margin: 6px 0; }
+.imp-bar { display: inline-flex; align-items: center; gap: 6px; }
+.imp-bar i { display: inline-block; height: 6px; max-width: 80px; flex: 1 0 60px; background: linear-gradient(90deg, var(--green), var(--amber), var(--red)); border-radius: 2px; }
 
 /* ── RECON (OSINT) VIEW ────────────────────────────────────────────────── */
 .recon-view { padding: 6px; }

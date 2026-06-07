@@ -67,28 +67,35 @@ _load()
 def _prune_locked() -> None:
     if len(_neurons) <= MAX_NEURONS:
         return
-    # Drop the weakest: least-activated, then oldest.
-    ranked = sorted(_neurons.values(), key=lambda n: (n.get("activations", 1), n.get("created", 0)))
+    # Drop the weakest: lowest importance, then least-activated, then oldest.
+    ranked = sorted(_neurons.values(),
+                    key=lambda n: (n.get("weight", 5), n.get("activations", 1), n.get("created", 0)))
     for n in ranked[: len(_neurons) - MAX_NEURONS]:
         _neurons.pop(n["id"], None)
 
 
 def add(text: str, kind: str = "note", tags: List[str] | None = None,
-        meta: dict | None = None) -> str | None:
+        meta: dict | None = None, weight: int | None = None) -> str | None:
     """Imprint a memory (neuron). Near-duplicates strengthen the existing one.
 
-    ``meta`` carries optional context (source, region, topic, link, time) shown
-    when the neuron is inspected.
+    ``meta`` carries optional context (source, region, topic, link, time).
+    ``weight`` is the memory's importance 1-10 (default 5) — it drives neuron
+    size and how far you can zoom out before it disappears.
     """
     text = (text or "").strip()[:500]
     if not text:
         return None
+    try:
+        w = max(1, min(10, int(weight))) if weight is not None else 5
+    except (TypeError, ValueError):
+        w = 5
     toks = sorted((set(t.lower() for t in (tags or [])) | _tokens(text)))[:24]
     clean_meta = {k: str(v)[:200] for k, v in (meta or {}).items() if v}
     with _lock:
         for n in _neurons.values():
             if n["text"].lower() == text.lower():
                 n["activations"] = n.get("activations", 1) + 1
+                n["weight"] = max(n.get("weight", 5), w)   # strengthen importance
                 if clean_meta and not n.get("meta"):
                     n["meta"] = clean_meta
                 _save()
@@ -96,7 +103,7 @@ def add(text: str, kind: str = "note", tags: List[str] | None = None,
         nid = uuid.uuid4().hex[:8]
         _neurons[nid] = {
             "id": nid, "text": text, "kind": kind, "tokens": toks,
-            "created": time.time(), "activations": 1, "meta": clean_meta,
+            "created": time.time(), "activations": 1, "weight": w, "meta": clean_meta,
         }
         _prune_locked()
         _save()
@@ -130,7 +137,7 @@ def graph() -> Dict:
         edges = _edges_locked()
         neurons = [{"id": n["id"], "text": n["text"], "kind": n["kind"],
                     "activations": n.get("activations", 1), "created": n.get("created", 0),
-                    "meta": n.get("meta", {})}
+                    "weight": n.get("weight", 5), "meta": n.get("meta", {})}
                    for n in _neurons.values()]
     deg: Dict[str, int] = {}
     for e in edges:

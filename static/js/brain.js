@@ -25,14 +25,14 @@ window.JarvisBrain = (() => {
     const t = ((n.meta && n.meta.topic) || "").toUpperCase();
     return TOPIC_COLORS[t] || KIND_COLORS[n.kind] || "#8aa0b4";
   }
-  const FOCAL = 900;          // perspective focal length
-  const BOUND = 230;          // containment sphere radius
+  const FOCAL = 1000;         // perspective focal length
+  const BOUND = 340;          // containment sphere radius (bigger, roomier brain)
 
   let cv, ctx, dpr = 1, W = 0, H = 0, cx = 0, cy = 0;
   let running = false, raf = null, inited = false, poll = null;
   let nodes = [], edges = [], byId = {};
   let selected = null;
-  let rotX = -0.3, rotY = 0, zoom = 1, autoRotate = true;
+  let rotX = -0.3, rotY = 0, zoom = 1.2, autoRotate = true;
 
   function color(kind) { return KIND_COLORS[kind] || "#8aa0b4"; }
 
@@ -101,8 +101,8 @@ window.JarvisBrain = (() => {
 
   // ── 3D physics ────────────────────────────────────────────────────────
   function step() {
-    for (const n of nodes) {           // centering
-      n.vx += -n.x * 0.0016; n.vy += -n.y * 0.0016; n.vz += -n.z * 0.0016;
+    for (const n of nodes) {           // gentle centering (weaker → more spread)
+      n.vx += -n.x * 0.0011; n.vy += -n.y * 0.0011; n.vz += -n.z * 0.0011;
     }
     for (let i = 0; i < nodes.length; i++) {   // repulsion
       const a = nodes[i];
@@ -110,8 +110,8 @@ window.JarvisBrain = (() => {
         const b = nodes[j];
         let dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
         let d2 = dx * dx + dy * dy + dz * dz || 0.01;
-        if (d2 > 90000) continue;
-        const d = Math.sqrt(d2), f = 1600 / d2;
+        if (d2 > 160000) continue;
+        const d = Math.sqrt(d2), f = 2400 / d2;
         dx /= d; dy /= d; dz /= d;
         a.vx += dx * f; a.vy += dy * f; a.vz += dz * f;
         b.vx -= dx * f; b.vy -= dy * f; b.vz -= dz * f;
@@ -121,7 +121,7 @@ window.JarvisBrain = (() => {
       const a = byId[e.a], b = byId[e.b];
       let dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
       const d = Math.hypot(dx, dy, dz) || 0.01;
-      const target = 70 + (1 - e.w) * 80;
+      const target = 85 + (1 - e.w) * 100;
       const f = (d - target) * 0.01;
       dx /= d; dy /= d; dz /= d;
       a.vx += dx * f; a.vy += dy * f; a.vz += dz * f;
@@ -148,12 +148,22 @@ window.JarvisBrain = (() => {
     const scale = FOCAL / (FOCAL - z) * zoom;
     n.sx = cx + x * scale; n.sy = cy + y * scale; n.depth = z; n.scale = scale;
   }
-  function radius(n) { return (3.5 + Math.min(8, (n.degree || 0)) * 0.7 + Math.min(4, Math.log2((n.activations || 1) + 1))) * n.scale; }
+  function radius(n) {
+    const w = n.weight || 5;          // importance 1-10 drives size
+    return (2 + w * 0.95 + Math.min(6, (n.degree || 0)) * 0.5 + Math.min(3, Math.log2((n.activations || 1) + 1))) * n.scale;
+  }
   function fog(z) { return Math.max(0.25, Math.min(1, (z + BOUND) / (2 * BOUND) * 0.85 + 0.3)); }
+  // Level-of-detail: important neurons stay visible when zoomed far out; trivial
+  // ones only appear as you zoom in. Returns an alpha factor 0..1.
+  function visibility(n) {
+    const w = n.weight || 5;
+    const zMin = 0.45 + (10 - w) * 0.14;   // w=10→0.45 (always), w=1→1.71 (zoom in)
+    return Math.max(0, Math.min(1, (zoom - (zMin - 0.45)) / 0.45));
+  }
 
   function draw(t) {
     ctx.clearRect(0, 0, W, H);
-    for (const n of nodes) project(n);
+    for (const n of nodes) { project(n); n._vis = visibility(n); }
     // neighbours of the selected neuron (for focus highlighting)
     let nbr = null;
     if (selected) {
@@ -163,11 +173,13 @@ window.JarvisBrain = (() => {
         if (e.b === selected.id) nbr.add(e.a);
       }
     }
-    // synapses
+    // synapses (only when both endpoints are visible at this zoom)
     for (const e of edges) {
       const a = byId[e.a], b = byId[e.b];
+      const vis = Math.min(a._vis, b._vis);
+      if (vis <= 0.02) continue;
       const touches = selected && (e.a === selected.id || e.b === selected.id);
-      let al = (0.06 + e.w * 0.4) * fog((a.depth + b.depth) / 2);
+      let al = (0.06 + e.w * 0.4) * fog((a.depth + b.depth) / 2) * vis;
       if (selected) al = touches ? Math.min(1, al + 0.5) : al * 0.18;
       ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy);
       ctx.strokeStyle = touches ? `rgba(255,255,255,${al.toFixed(3)})` : `rgba(56,225,255,${al.toFixed(3)})`;
@@ -176,27 +188,35 @@ window.JarvisBrain = (() => {
     }
     // neurons, far→near
     const order = [...nodes].sort((p, q) => p.depth - q.depth);
+    let visible = 0;
     for (const n of order) {
+      if (n._vis <= 0.02) continue;        // hidden at this zoom (low importance)
+      visible++;
       const r = Math.max(1.5, radius(n)), col = nodeColor(n);
       const focused = !selected || n === selected || (nbr && nbr.has(n.id));
-      const a = fog(n.depth) * (focused ? 1 : 0.22);
+      const a = fog(n.depth) * n._vis * (focused ? 1 : 0.22);
       const pulse = 0.6 + 0.4 * Math.sin(t / 600 + n.x * 0.05);
       ctx.globalAlpha = a * 0.25;
       ctx.beginPath(); ctx.arc(n.sx, n.sy, r + 5 * n.scale, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill();
       ctx.globalAlpha = a * pulse;
       ctx.beginPath(); ctx.arc(n.sx, n.sy, r, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill();
       ctx.globalAlpha = 1;
-      // label hubs (and the selection + its neighbours) for readability
+      // label the selection, its neighbours, and important/high-degree neurons
+      const important = (n.weight || 5) >= 8 && n._vis > 0.5;
       const isHub = (n.degree || 0) >= 4 && n.scale > 0.9;
-      if (n === selected || (nbr && nbr.has(n.id)) || (isHub && !selected)) {
+      if (n === selected || (nbr && nbr.has(n.id)) || (!selected && (important || isHub))) {
+        ctx.globalAlpha = n._vis;
         ctx.fillStyle = n === selected ? "#fff" : "#aebccb";
         ctx.font = "10px 'IBM Plex Mono', monospace";
-        ctx.fillText((n.text || "").slice(0, 38), n.sx + r + 5, n.sy + 3);
+        ctx.fillText((n.text || "").slice(0, 40), n.sx + r + 5, n.sy + 3);
+        ctx.globalAlpha = 1;
       }
       if (n === selected) {
         ctx.beginPath(); ctx.arc(n.sx, n.sy, r + 4, 0, Math.PI * 2); ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.3; ctx.stroke();
       }
     }
+    const vEl = document.getElementById("brain-visible");
+    if (vEl) vEl.textContent = `${visible}/${nodes.length} shown · zoom ${zoom.toFixed(1)}×`;
     if (!nodes.length) {
       ctx.fillStyle = "#6b7886"; ctx.font = "12px 'IBM Plex Mono', monospace"; ctx.textAlign = "center";
       ctx.fillText("brain empty — imprint a memory below or run the agent mesh", W / 2, H / 2);
@@ -216,6 +236,7 @@ window.JarvisBrain = (() => {
   function at(x, y) {
     let best = null, bestDepth = -1e9;
     for (const n of nodes) {
+      if ((n._vis || 0) <= 0.05) continue;     // can't pick a hidden neuron
       const r = Math.max(radius(n), 9);
       if (Math.hypot(n.sx - x, n.sy - y) < r + 4 && n.depth > bestDepth) { best = n; bestDepth = n.depth; }
     }
@@ -239,7 +260,8 @@ window.JarvisBrain = (() => {
   function showDetail(n) {
     const el = $("brain-detail"); if (!el) return;
     const m = n.meta || {};
-    let metaHtml = "";
+    const w = n.weight || 5;
+    let metaHtml = `<div class="kv"><span>IMPORTANCE</span><b class="imp-bar"><i style="width:${w * 10}%"></i> ${w}/10</b></div>`;
     if (m.source) metaHtml += `<div class="kv"><span>SOURCE</span><b>${esc(m.source)}</b></div>`;
     if (m.region || m.topic) metaHtml += `<div class="kv"><span>CONTEXT</span><b>${esc([m.region, m.topic].filter(Boolean).join(" · "))}</b></div>`;
     if (m.time) metaHtml += `<div class="kv"><span>SEEN</span><b>${esc(m.time)}</b></div>`;
@@ -274,10 +296,10 @@ window.JarvisBrain = (() => {
       cv.addEventListener("mousedown", down);
       window.addEventListener("mousemove", (e) => { if (dragging) move(e); });
       window.addEventListener("mouseup", (e) => { if (dragging) up(e); });
-      cv.addEventListener("wheel", (e) => { e.preventDefault(); zoom = Math.max(0.4, Math.min(3.5, zoom * (e.deltaY < 0 ? 1.1 : 0.9))); }, { passive: false });
+      cv.addEventListener("wheel", (e) => { e.preventDefault(); zoom = Math.max(0.25, Math.min(5, zoom * (e.deltaY < 0 ? 1.1 : 0.9))); }, { passive: false });
       cv.addEventListener("touchstart", (e) => { if (e.touches.length === 2) pinch = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); else down(e); }, { passive: true });
       cv.addEventListener("touchmove", (e) => {
-        if (e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); if (pinch) zoom = Math.max(0.4, Math.min(3.5, zoom * (d / pinch))); pinch = d; e.preventDefault(); }
+        if (e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); if (pinch) zoom = Math.max(0.25, Math.min(5, zoom * (d / pinch))); pinch = d; e.preventDefault(); }
         else move(e);
       }, { passive: false });
       cv.addEventListener("touchend", (e) => { pinch = 0; up(e); });

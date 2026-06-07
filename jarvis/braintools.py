@@ -40,6 +40,8 @@ SCHEMA: List[Dict] = [
                     "text": {"type": "string", "description": "The fact to remember."},
                     "tags": {"type": "array", "items": {"type": "string"},
                              "description": "2-5 keyword tags."},
+                    "importance": {"type": "integer",
+                                   "description": "Significance 1-10 (10 = critical)."},
                 },
                 "required": ["text"],
             },
@@ -60,8 +62,8 @@ def _recall(query: str = "", k: int = 8) -> List[Dict]:
     return memory.recall(query, k=min(int(k or 8), 15))
 
 
-def _save(text: str = "", tags: List[str] | None = None) -> Dict:
-    nid = memory.add(text, kind="chat", tags=tags, meta={"source": "JARVIS (AI)"})
+def _save(text: str = "", tags: List[str] | None = None, importance: int = 5) -> Dict:
+    nid = memory.add(text, kind="chat", tags=tags, weight=importance, meta={"source": "JARVIS (AI)"})
     return {"saved": bool(nid), "id": nid}
 
 
