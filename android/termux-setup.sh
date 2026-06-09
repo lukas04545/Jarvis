@@ -31,6 +31,8 @@ python -m venv .venv
 
 echo "▸ installing Python dependencies…"
 ./.venv/bin/pip install -r requirements.txt
+# pytest powers the DEV agent's test gate (so it can verify changes / auto-roll-back)
+./.venv/bin/pip install -q pytest || true
 
 if [ ! -f .env ]; then
   cp .env.example .env

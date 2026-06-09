@@ -744,8 +744,11 @@
       const steps = (d.actions || []).map((a) =>
         `<div class="dev-step"><span class="dev-ic">${DEV_ICON[a.tool] || "•"}</span> <b>${esc(a.tool)}</b> <span class="news-src">${esc(a.detail)}</span></div>`).join("");
       const files = (d.files_changed || []).map((f) => `<span class="kind-chip">${esc(f)}</span>`).join("") || "<span class='news-src'>none</span>";
-      const tests = d.tests
-        ? `<span class="${d.tests.passed ? "up" : "down"}">${d.tests.passed ? "✓ tests pass" : "✕ tests fail"}</span>` : "<span class='news-src'>not run</span>";
+      let tests = "<span class='news-src'>not run</span>";
+      if (d.tests) {
+        if (d.tests.ran === false) tests = `<span class="down">⚠ tests not run</span> <span class="news-src">${esc(d.tests.note || "pytest unavailable")}</span>`;
+        else tests = `<span class="${d.tests.passed ? "up" : "down"}">${d.tests.passed ? "✓ tests pass" : "✕ tests fail"}</span>`;
+      }
       const dirs = (d.dirs_created || []).map((f) => `<span class="kind-chip">${esc(f)}</span>`).join("");
       const banner = d.rolled_back
         ? `<div class="dev-rollback-banner">⟲ CHANGES AUTO-ROLLED BACK — Jarvis tests failed, restored the previous working version` +

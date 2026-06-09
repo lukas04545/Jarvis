@@ -817,8 +817,9 @@ def test_devagent_autorolls_back_on_test_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(devagent, "REPO_ROOT", str(tmp_path))
     monkeypatch.setattr(deepseek.config, "DEEPSEEK_API_KEY", "sk-x")
     monkeypatch.setattr(devagent, "_git_diff", lambda: "")
-    # Tests fail after the write, then pass once it's rolled back.
-    seq = iter([{"passed": False, "output": "boom"}, {"passed": True, "output": "ok"}])
+    # Tests RAN and failed after the write, then pass once it's rolled back.
+    seq = iter([{"ran": True, "passed": False, "output": "boom"},
+                {"ran": True, "passed": True, "output": "ok"}])
     monkeypatch.setattr(devagent, "_run_tests", lambda: next(seq))
     monkeypatch.setattr(deepseek.requests, "post", _drive_write("def broken(:\n", tmp_path))
 
@@ -826,6 +827,32 @@ def test_devagent_autorolls_back_on_test_failure(tmp_path, monkeypatch):
     assert out["rolled_back"] is True
     assert out["tests_after_rollback"]["passed"] is True
     assert not (tmp_path / "module.py").exists()   # new file removed on rollback
+
+
+def test_devagent_keeps_change_when_tests_cannot_run(tmp_path, monkeypatch):
+    # Regression: pytest not installed must NOT trigger a rollback.
+    monkeypatch.setenv("JARVIS_ENABLE_DEVAGENT", "1")
+    monkeypatch.setattr(devagent, "REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(deepseek.config, "DEEPSEEK_API_KEY", "sk-x")
+    monkeypatch.setattr(devagent, "_git_diff", lambda: "")
+    monkeypatch.setattr(devagent, "_run_tests", lambda: {
+        "ran": False, "passed": False, "output": "No module named pytest",
+        "note": "pytest not available"})
+    monkeypatch.setattr(deepseek.requests, "post", _drive_write("VALID = 1\n", tmp_path))
+
+    out = devagent.develop("edit module")
+    assert out["rolled_back"] is False                       # not rolled back
+    assert (tmp_path / "module.py").read_text() == "VALID = 1\n"   # change kept
+
+
+def test_run_tests_flags_missing_pytest(monkeypatch):
+    class _R:
+        returncode = 1
+        stdout = ""
+        stderr = "/data/.../python: No module named pytest"
+    monkeypatch.setattr(devagent.subprocess, "run", lambda *a, **k: _R())
+    res = devagent._run_tests()
+    assert res["ran"] is False and "pytest" in res["note"].lower()
 
 
 def test_devagent_manual_rollback_restores_original(tmp_path, monkeypatch):

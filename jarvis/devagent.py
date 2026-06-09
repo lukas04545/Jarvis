@@ -152,12 +152,27 @@ def rollback_last() -> Dict:
 
 
 def _run_tests() -> Dict:
+    """Run the pytest suite.
+
+    Distinguishes a real failure (``ran`` True, ``passed`` False) from "couldn't
+    run" (``ran`` False — e.g. pytest not installed). The DEV agent only rolls
+    back on a genuine failure, never just because the runner is unavailable.
+    """
     try:
         r = subprocess.run([sys.executable, "-m", "pytest", "-q", "--no-header"],
                            cwd=REPO_ROOT, capture_output=True, text=True, timeout=300)
-        return {"passed": r.returncode == 0, "output": (r.stdout + r.stderr)[-1800:]}
     except Exception as exc:
-        return {"passed": False, "output": str(exc)[:400]}
+        return {"ran": False, "passed": False, "returncode": -1,
+                "output": f"could not launch pytest: {exc}"[:400],
+                "note": "pytest not available — install it to enable test gating"}
+    out = (r.stdout + r.stderr)[-1800:]
+    rc = r.returncode
+    if "no module named pytest" in out.lower() or rc == 4:   # missing / usage error
+        return {"ran": False, "passed": False, "returncode": rc, "output": out,
+                "note": "pytest not available — run `pip install pytest` to enable test gating"}
+    if rc == 5:                                              # no tests collected → neutral
+        return {"ran": True, "passed": True, "returncode": rc, "output": out}
+    return {"ran": True, "passed": rc == 0, "returncode": rc, "output": out}
 
 
 def _git_diff() -> str:
@@ -310,7 +325,8 @@ def develop(task: str, max_rounds: int = 14) -> Dict:
     tests = _run_tests() if repo_touched else None
     rolled_back = False
     tests_after_rollback = None
-    if repo_touched and tests and not tests.get("passed"):
+    # Only roll back on a GENUINE failure — never just because pytest can't run.
+    if repo_touched and tests and tests.get("ran") and not tests.get("passed"):
         # The Jarvis change-set is broken — restore the previous working versions.
         _restore(checkpoint)
         for d in sorted(created_dirs, key=len, reverse=True):
