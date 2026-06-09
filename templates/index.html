@@ -17,11 +17,21 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/terminal.css') }}" />
+  <style>
+    /* Provider rows in the settings modal */
+    .prov-row { border-top: 1px solid rgba(255,255,255,0.07); padding: 9px 0; }
+    .prov-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 5px; }
+    .prov-name { font-weight: 600; font-size: 0.82rem; color: var(--text, #c8d0dc); }
+    .prov-limits { color: var(--text-dim, #6b7886); font-size: 0.72rem; }
+    .prov-link { color: var(--cyan, #38e1ff); font-size: 0.72rem; text-decoration: none; }
+    .prov-link:hover { text-decoration: underline; }
+    .modal-sep { border-top: 1px solid rgba(255,255,255,0.12); margin: 12px 0 10px; }
+  </style>
 </head>
 <body>
   <div id="scanlines"></div>
 
-  <!-- ── TOP STATUS BAR ───────────────────────────────────────────────── -->
+  <!-- ── TOP STATUS BAR ─────────────────────────────────────────────── -->
   <header class="topbar">
     <div class="brand">
       <span class="brand-mark">◈</span> J.A.R.V.I.S.
@@ -33,31 +43,31 @@
       <span class="stat">POSTURE <b id="posture" class="pill">····</b></span>
       <span class="stat">SENSORS <b id="sensors">-/-</b></span>
       <span class="stat">v{{ version }}</span>
-      <button id="settings-btn" title="API keys & settings">⚙ SETTINGS</button>
-      <button id="install-btn" hidden>⤓ INSTALL</button>
+      <button id="settings-btn" title="API keys &amp; settings">⚙ SETTINGS</button>
+      <button id="install-btn" hidden>⤣ INSTALL</button>
     </div>
   </header>
 
-  <!-- ── TAB BAR ──────────────────────────────────────────────────────── -->
+  <!-- ── TAB BAR ──────────────────────────────────────────────────── -->
   <nav class="tabs" id="tabs">
     <button class="tab active" data-view="terminal">▣ TERMINAL</button>
     <button class="tab" data-view="globe">◉ ORBITAL GLOBE</button>
-    <button class="tab" data-view="forecast">⊹ ORACLE · FORECAST</button>
+    <button class="tab" data-view="forecast">⊙ ORACLE · FORECAST</button>
     <button class="tab" data-view="stocks">⊞ STOCKS</button>
-    <button class="tab" data-view="agents">⌬ AGENT MESH</button>
+    <button class="tab" data-view="agents">⬡ AGENT MESH</button>
     <button class="tab" data-view="dev">⌥ DEV AGENT</button>
     <button class="tab" data-view="brain">✺ BRAIN</button>
     <button class="tab" data-view="recon">⊠ RECON</button>
     <button class="tab" data-view="device">⊟ DEVICE SENSORS</button>
   </nav>
 
-  <!-- ── NEWS TICKER ──────────────────────────────────────────────────── -->
+  <!-- ── NEWS TICKER ──────────────────────────────────────────────── -->
   <div class="ticker">
     <span class="ticker-label">WORLD WIRE</span>
     <div class="ticker-track"><span id="ticker-text">Establishing uplink to global feeds…</span></div>
   </div>
 
-  <!-- ══ VIEW: TERMINAL ═══════════════════════════════════════════════════ -->
+  <!-- ══ VIEW: TERMINAL ══════════════════════════════════════════════════════════════ -->
   <main class="grid view active" id="view-terminal">
 
     <!-- LEFT: WORLD WIRE -->
@@ -83,7 +93,7 @@
     <section class="panel" id="panel-console">
       <div class="panel-head">
         <span>② J.A.R.V.I.S. AI CONSOLE</span>
-        <span class="panel-meta" id="console-meta">deepseek</span>
+        <span class="panel-meta" id="console-meta">offline</span>
       </div>
       <div class="panel-body console" id="console-log"></div>
       <div class="console-input">
@@ -105,7 +115,7 @@
     </section>
   </main>
 
-  <!-- ══ VIEW: ORBITAL GLOBE ══════════════════════════════════════════════ -->
+  <!-- ══ VIEW: ORBITAL GLOBE ══════════════════════════════════════════════════════════ -->
   <section class="view globe-view" id="view-globe">
     <div class="globe-wrap">
       <div id="globe-map"></div>
@@ -137,12 +147,12 @@
     </aside>
   </section>
 
-  <!-- ══ VIEW: ORACLE FORECAST ════════════════════════════════════════════ -->
+  <!-- ══ VIEW: ORACLE FORECAST ══════════════════════════════════════════════════════════════ -->
   <section class="view forecast-view" id="view-forecast">
     <div class="forecast-main">
       <div class="forecast-head">
         <div>
-          <div class="forecast-title">⊹ J.A.R.V.I.S. ORACLE</div>
+          <div class="forecast-title">⊙ J.A.R.V.I.S. ORACLE</div>
           <div class="forecast-sub" id="forecast-meta">predictive engine · idle</div>
         </div>
         <button id="forecast-run" class="btn-primary">⟳ GENERATE FORECAST</button>
@@ -165,7 +175,7 @@
     </aside>
   </section>
 
-  <!-- ══ VIEW: STOCKS (TimesFM forecast) ══════════════════════════════════ -->
+  <!-- ══ VIEW: STOCKS (TimesFM forecast) ══════════════════════════════════════════════════════════════ -->
   <section class="view stocks-view" id="view-stocks">
     <div class="stocks-main">
       <div class="agents-head">
@@ -193,12 +203,12 @@
     </div>
   </section>
 
-  <!-- ══ VIEW: AGENT MESH ═════════════════════════════════════════════════ -->
+  <!-- ══ VIEW: AGENT MESH ════════════════════════════════════════════════════════════════════════════════ -->
   <section class="view agents-view" id="view-agents">
     <div class="agents-head">
       <div>
-        <div class="forecast-title">⌬ AGENT MESH</div>
-        <div class="forecast-sub">Director J.A.R.V.I.S. + specialist desks · DeepSeek</div>
+        <div class="forecast-title">⬡ AGENT MESH</div>
+        <div class="forecast-sub">Director J.A.R.V.I.S. + specialist desks · free LLM</div>
       </div>
     </div>
     <div class="agents-input">
@@ -216,13 +226,13 @@
     </div>
   </section>
 
-  <!-- ══ VIEW: DEV AGENT (self-coding harness) ════════════════════════════ -->
+  <!-- ══ VIEW: DEV AGENT (self-coding harness) ══════════════════════════════════════════════════════════════ -->
   <section class="view dev-view" id="view-dev">
     <div class="dev-agent-main">
       <div class="agents-head">
         <div>
           <div class="forecast-title">⌥ DEV AGENT</div>
-          <div class="forecast-sub" id="dev-sub">an AI engineer that reads, writes & tests the Jarvis code</div>
+          <div class="forecast-sub" id="dev-sub">an AI engineer that reads, writes &amp; tests the Jarvis code</div>
         </div>
         <span class="panel-meta" id="dev-status">checking…</span>
       </div>
@@ -240,7 +250,7 @@
     </div>
   </section>
 
-  <!-- ══ VIEW: BRAIN (neural memory) ══════════════════════════════════════ -->
+  <!-- ══ VIEW: BRAIN (neural memory) ═══════════════════════════════════════════════════════════════════════════════ -->
   <section class="view brain-view" id="view-brain">
     <div class="brain-wrap">
       <canvas id="brain-canvas"></canvas>
@@ -256,7 +266,7 @@
       <div class="panel-head"><span>⟲ AUTO-LEARN</span><span class="panel-meta" id="ingest-status">idle</span></div>
       <div class="rail-box">
         <button id="ingest-now" class="btn-primary">⟳ INGEST NEWS NOW</button>
-        <p class="dev-note" style="padding:8px 0 0">Global news is scraped, distilled by DeepSeek into facts, and saved as auto-connecting neurons — continuously feeding the ORACLE's predictions.</p>
+        <p class="dev-note" style="padding:8px 0 0">Global news is scraped, distilled by AI into facts, and saved as auto-connecting neurons — continuously feeding the ORACLE's predictions.</p>
       </div>
       <div class="panel-head"><span>✺ MEMORY</span><span class="panel-meta" id="brain-meta">persistent</span></div>
       <div class="rail-box" id="brain-detail">Select a neuron to inspect the memory.</div>
@@ -273,7 +283,7 @@
     </aside>
   </section>
 
-  <!-- ══ VIEW: RECON (email-exposure OSINT) ═══════════════════════════════ -->
+  <!-- ══ VIEW: RECON (email-exposure OSINT) ═════════════════════════════════════════════════════════════════════ -->
   <section class="view recon-view" id="view-recon">
     <div class="recon-main">
       <div class="agents-head">
@@ -297,7 +307,7 @@
     </div>
   </section>
 
-  <!-- ══ VIEW: DEVICE SENSORS ═════════════════════════════════════════════ -->
+  <!-- ══ VIEW: DEVICE SENSORS ═══════════════════════════════════════════════════════════════════════════════ -->
   <section class="view device-view" id="view-device">
     <div class="device-grid">
 
@@ -327,7 +337,7 @@
       </div>
 
       <div class="dev-panel">
-        <div class="panel-head"><span>🎙 VOICE INPUT</span><span class="panel-meta" id="voice-state">idle</span></div>
+        <div class="panel-head"><span>🎤 VOICE INPUT</span><span class="panel-meta" id="voice-state">idle</span></div>
         <div class="rail-box">
           <div class="voice-transcript" id="voice-transcript">Tap LISTEN and speak a tasking…</div>
           <div class="dev-actions">
@@ -357,40 +367,119 @@
     </div>
   </section>
 
-  <!-- ══ SETTINGS MODAL ═══════════════════════════════════════════════════ -->
+  <!-- ══ SETTINGS MODAL ════════════════════════════════════════════════════════════════════════ -->
   <div class="modal" id="settings-modal" hidden>
     <div class="modal-card">
       <div class="modal-head">
-        <span>⚙ SETTINGS — API KEYS</span>
+        <span>⚙ SETTINGS — FREE LLM PROVIDERS</span>
         <button id="settings-close" title="close">✕</button>
       </div>
       <div class="modal-body">
-        <label class="field-label">DeepSeek API key <span class="key-state" id="ds-state"></span></label>
-        <input id="ds-key" class="key-input" type="password" autocomplete="off"
-               placeholder="sk-…  (powers the J.A.R.V.I.S. AI core)" />
+        <p class="modal-note" style="margin-bottom:10px">
+          Configure any free-tier provider. JARVIS auto-selects the first available in priority order.
+          Keys stored server-side in <code>.jarvis_secrets.json</code> (chmod 600, gitignored).
+        </p>
+
+        <div class="prov-row">
+          <div class="prov-head">
+            <span class="prov-name">Google AI Studio</span>
+            <span class="key-state" id="google-state"></span>
+            <span class="prov-limits">Gemini 2.0 Flash · 250K tok/min · free</span>
+            <a class="prov-link" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">aistudio.google.com ↗</a>
+          </div>
+          <input id="google-key" class="key-input" type="password" autocomplete="off" placeholder="AIza…" />
+        </div>
+
+        <div class="prov-row">
+          <div class="prov-head">
+            <span class="prov-name">Groq</span>
+            <span class="key-state" id="groq-state"></span>
+            <span class="prov-limits">Llama 3.3 70B · 14.4K req/day · free</span>
+            <a class="prov-link" href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com ↗</a>
+          </div>
+          <input id="groq-key" class="key-input" type="password" autocomplete="off" placeholder="gsk_…" />
+        </div>
+
+        <div class="prov-row">
+          <div class="prov-head">
+            <span class="prov-name">Cerebras</span>
+            <span class="key-state" id="cerebras-state"></span>
+            <span class="prov-limits">Llama 3.1 70B · 1M tok/day · free</span>
+            <a class="prov-link" href="https://cloud.cerebras.ai" target="_blank" rel="noopener">cloud.cerebras.ai ↗</a>
+          </div>
+          <input id="cerebras-key" class="key-input" type="password" autocomplete="off" placeholder="csk-…" />
+        </div>
+
+        <div class="prov-row">
+          <div class="prov-head">
+            <span class="prov-name">OpenRouter</span>
+            <span class="key-state" id="openrouter-state"></span>
+            <span class="prov-limits">Llama 3.3 70B free · 50 req/day</span>
+            <a class="prov-link" href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai ↗</a>
+          </div>
+          <input id="openrouter-key" class="key-input" type="password" autocomplete="off" placeholder="sk-or-…" />
+        </div>
+
+        <div class="prov-row">
+          <div class="prov-head">
+            <span class="prov-name">Mistral AI</span>
+            <span class="key-state" id="mistral-state"></span>
+            <span class="prov-limits">Mistral Small · 1B tok/month · free</span>
+            <a class="prov-link" href="https://console.mistral.ai" target="_blank" rel="noopener">console.mistral.ai ↗</a>
+          </div>
+          <input id="mistral-key" class="key-input" type="password" autocomplete="off" placeholder="…" />
+        </div>
+
+        <div class="prov-row">
+          <div class="prov-head">
+            <span class="prov-name">Cohere</span>
+            <span class="key-state" id="cohere-state"></span>
+            <span class="prov-limits">Command A · 1K req/month · free</span>
+            <a class="prov-link" href="https://cohere.com/" target="_blank" rel="noopener">cohere.com ↗</a>
+          </div>
+          <input id="cohere-key" class="key-input" type="password" autocomplete="off" placeholder="…" />
+        </div>
+
+        <div class="prov-row">
+          <div class="prov-head">
+            <span class="prov-name">HuggingFace</span>
+            <span class="key-state" id="huggingface-state"></span>
+            <span class="prov-limits">Llama 3.3 70B · $0.10/mo credits</span>
+            <a class="prov-link" href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener">huggingface.co ↗</a>
+          </div>
+          <input id="huggingface-key" class="key-input" type="password" autocomplete="off" placeholder="hf_…" />
+        </div>
+
+        <div class="prov-row">
+          <div class="prov-head">
+            <span class="prov-name">DeepSeek</span>
+            <span class="key-state" id="deepseek-state"></span>
+            <span class="prov-limits">DeepSeek V3 · paid / trial credits</span>
+            <a class="prov-link" href="https://platform.deepseek.com" target="_blank" rel="noopener">platform.deepseek.com ↗</a>
+          </div>
+          <input id="deepseek-key" class="key-input" type="password" autocomplete="off" placeholder="sk-…" />
+        </div>
+
+        <div class="modal-sep"></div>
 
         <label class="field-label">Have I Been Pwned API key <span class="key-state" id="hibp-state"></span></label>
         <input id="hibp-key" class="key-input" type="password" autocomplete="off"
                placeholder="optional — live breach-directory lookups in RECON" />
 
         <div class="modal-actions">
-          <button id="settings-save" class="btn-primary">SAVE KEY</button>
-          <button id="settings-clear" class="btn-ghost">CLEAR</button>
+          <button id="settings-save" class="btn-primary">SAVE KEYS</button>
+          <button id="settings-clear" class="btn-ghost">CLEAR ALL</button>
           <span id="settings-msg"></span>
         </div>
         <p class="modal-note">
-          The key is stored on the server you're connected to
-          (<code>.jarvis_secrets.json</code>, gitignored, chmod 600) and used only
-          to call DeepSeek. Intended for self-hosted / local use — it is never
-          sent back to the browser. Get a key at <code>platform.deepseek.com</code>.
-          All data feeds (news, surveillance, satellite, markets, webcams) are
-          free and keyless.
+          Priority: Google → Groq → Cerebras → OpenRouter → Mistral → Cohere → HuggingFace → DeepSeek.
+          Override with <code>LLM_PROVIDER_ORDER</code> env var. Keys never sent back to the browser.
         </p>
       </div>
     </div>
   </div>
 
-  <!-- ── FUNCTION BAR ─────────────────────────────────────────────────── -->
+  <!-- ── FUNCTION BAR ───────────────────────────────────────────────────── -->
   <footer class="fnbar" id="fnbar">
     <button data-cmd="HELP"><b>F1</b> HELP</button>
     <button data-cmd="NEWS"><b>F2</b> WIRE</button>
@@ -407,8 +496,6 @@
   <script src="{{ url_for('static', filename='js/device.js') }}"></script>
   <script src="{{ url_for('static', filename='js/terminal.js') }}"></script>
   <script>
-    // Register the service worker at root scope so the whole terminal is
-    // installable + offline-capable on Android.
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () =>
         navigator.serviceWorker.register("/sw.js").catch(() => {})
