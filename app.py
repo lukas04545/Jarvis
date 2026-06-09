@@ -24,6 +24,7 @@ from jarvis import (
     __version__,
     agents,
     braintools,
+    chattools,
     briefing,
     deepseek,
     device,
@@ -310,7 +311,7 @@ def api_chat():
         # Full brain access: DeepSeek can recall / search / save memory via tools.
         result = deepseek.complete_with_tools(
             deepseek.build_messages(prompt, context),
-            braintools.SCHEMA, braintools.IMPLS)
+            chattools.SCHEMA, chattools.IMPLS)
         return jsonify({"reply": result["text"], "tools_used": result["tools_used"]})
     except deepseek.DeepSeekError as exc:
         return jsonify({"error": str(exc)}), 502
@@ -326,7 +327,7 @@ def api_chat_stream():
 
     def event_stream() -> Iterator[str]:
         # Streamed + full brain access: tool events, then the answer streams in.
-        for ev in deepseek.stream_with_tools(messages, braintools.SCHEMA, braintools.IMPLS):
+        for ev in deepseek.stream_with_tools(messages, chattools.SCHEMA, chattools.IMPLS):
             yield f"data: {json.dumps(ev)}\n\n"
         yield "data: [DONE]\n\n"
 

@@ -22,7 +22,7 @@ import threading
 from datetime import datetime, timezone
 from typing import Dict, List
 
-from jarvis import deepseek, memory, runtime
+from jarvis import deepseek, memory, runtime, websearch
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _BLOCKED_DIRS = {".git", ".venv", "venv", "env", "__pycache__",
@@ -230,6 +230,11 @@ SCHEMA: List[Dict] = [
         "parameters": {"type": "object", "properties": {
             "text": {"type": "string"}, "tags": {"type": "array", "items": {"type": "string"}}},
             "required": ["text"]}}},
+    {"type": "function", "function": {
+        "name": "web_search",
+        "description": "Search the web for docs, APIs or examples while coding.",
+        "parameters": {"type": "object", "properties": {
+            "query": {"type": "string"}}, "required": ["query"]}}},
 ]
 
 _SYSTEM = (
@@ -332,10 +337,14 @@ def develop(task: str, max_rounds: int = 14) -> Dict:
                               meta={"source": "DEV agent"})
         return {"saved": bool(nid)}
 
+    def web_search(query: str = ""):
+        rec("web_search", query)
+        return websearch.search(query, 5)
+
     impls = {"list_files": list_files, "read_file": read_file, "make_dir": make_dir,
              "write_file": write_file, "run_tests": run_tests, "git_diff": git_diff,
              "revert_all": revert_all, "recall_knowledge": recall_knowledge,
-             "save_knowledge": save_knowledge}
+             "save_knowledge": save_knowledge, "web_search": web_search}
 
     # Seed the task with any relevant prior coding knowledge from the CODE brain.
     prior = memory.code.recall(task, k=6)

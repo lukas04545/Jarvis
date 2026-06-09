@@ -18,7 +18,7 @@
 
 | Capability | How |
 |---|---|
-| **AI core (J.A.R.V.I.S.)** | DeepSeek chat-completions, streamed token-by-token into the console, with a senior-analyst persona. |
+| **AI core (J.A.R.V.I.S.)** | DeepSeek chat, streamed token-by-token, with a senior-analyst persona **and a tool belt**: it can **web-search**, **read pages**, recall/save **memory**, summarise the live **situation**, run the **ORACLE** forecast and **forecast stocks** — orchestrating the whole platform from chat. |
 | **Global news tracking** | Aggregates 8 international RSS wires (BBC, Al Jazeera, DW, NHK, France24, CNA, AP, Reuters), dedupes, and auto-tags each item by **region** and **topic** (CONFLICT / MARKETS / POLITICS / DISASTER / TECH / HEALTH). |
 | **Global surveillance** | Live OSINT sensor grid — **USGS** seismic activity, **ISS** orbital position, **NOAA** space-weather alerts — rolled into a single threat *posture* (NOMINAL → CRITICAL). |
 | **AI situational briefing** | `BRIEF` / F4 packs the live wire + sensor picture into DeepSeek and returns a BLUF-style intelligence briefing. |
@@ -134,6 +134,8 @@ jarvis/
   agents.py             multi-agent harness (Director + 13 specialist subagents)
   devagent.py           self-coding agent (repo-confined file tools + tests)
   braintools.py         brain tools exposed to DeepSeek (recall/save/stats)
+  chattools.py          full chat tool belt (web search + subsystem control)
+  websearch.py          keyless web search + page reader
   memory.py             persistent memory — main + code brains, Markdown files
   ingest.py             news→brain learning loop (scrape → DeepSeek → neurons)
   osint.py              email-exposure recon (holehe + breach metadata)

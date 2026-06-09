@@ -186,6 +186,7 @@
 
   const HELP = [
     "COMMAND REFERENCE",
+    "  (just chat) — JARVIS can web-search, read pages, run forecasts & recall memory",
     "  HELP            this reference",
     "  NEWS            refresh the World Wire",
     "  SURV            refresh the surveillance grid",

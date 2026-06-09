@@ -34,7 +34,10 @@ SYSTEM_PROMPT = (
     "You have a persistent neural memory you can use via tools: recall_memory to "
     "look up what you know, save_memory to remember important new facts, and "
     "brain_stats. Recall before answering when prior context would help, and save "
-    "durable conclusions so you build continuity across sessions."
+    "durable conclusions so you build continuity across sessions. You can also ACT: "
+    "web_search and open_url to look things up live, situation for the current "
+    "global picture, forecast_events to run the ORACLE, and forecast_stock for "
+    "prices. Use these tools to give grounded, current answers rather than guessing."
 )
 
 

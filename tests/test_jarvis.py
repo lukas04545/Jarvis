@@ -11,8 +11,9 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from jarvis import (  # noqa: E402
-    agents, braintools, deepseek, devagent, device, fallback, forecast, ingest, memory,
-    news, osint, runtime, signals, stocks, surveillance, webcams,
+    agents, braintools, chattools, deepseek, devagent, device, fallback, forecast,
+    ingest, memory, news, osint, runtime, signals, stocks, surveillance, webcams,
+    websearch,
 )
 
 
@@ -658,6 +659,42 @@ def test_complete_with_tools_executes_and_saves(monkeypatch):
     assert out["text"] == "Noted, Operator."
     assert any(t["name"] == "save_memory" for t in out["tools_used"])
     assert memory.recall("terse briefings", k=1)   # DeepSeek actually wrote to the brain
+
+
+def test_websearch_parses_results(monkeypatch):
+    body = ('<a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg='
+            'https%3A%2F%2Fexample.com%2Fa">Hello World</a>'
+            '<a class="result__snippet">a snippet about example</a>')
+
+    class _R:
+        text = body
+        def raise_for_status(self):
+            pass
+    monkeypatch.setattr(websearch.http, "post", lambda *a, **k: _R())
+    res = websearch.search("jarvis-unit-test-query")
+    assert res["count"] == 1
+    r0 = res["results"][0]
+    assert r0["title"] == "Hello World"
+    assert r0["url"] == "https://example.com/a"
+    assert r0["snippet"] == "a snippet about example"
+
+
+def test_chattools_exposes_action_tools():
+    names = {t["function"]["name"] for t in chattools.SCHEMA}
+    assert {"web_search", "open_url", "situation", "forecast_events",
+            "forecast_stock", "recall_memory", "save_memory"} <= names
+
+
+def test_chattools_forecast_stock(monkeypatch):
+    monkeypatch.setattr(chattools.stocks, "get_forecast",
+                        lambda t, h=20: {"ticker": t.upper(), "symbol": "x", "last": 1.0,
+                                         "change_pct": 0.0, "predicted": 2.0,
+                                         "predicted_change_pct": 100.0, "horizon": h,
+                                         "method": "statistical", "simulated": True,
+                                         "history": [], "forecast": []})
+    out = chattools.IMPLS["forecast_stock"](ticker="aapl", horizon=10)
+    assert out["ticker"] == "AAPL" and out["predicted"] == 2.0 and out["horizon"] == 10
+    assert "history" not in out          # trimmed to a compact summary for the model
 
 
 def test_http_session_pooled_with_ua():
