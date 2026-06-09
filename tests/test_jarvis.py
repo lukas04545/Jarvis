@@ -46,8 +46,10 @@ def isolate_runtime(tmp_path, monkeypatch):
     """Keep the runtime key store + brain confined to temp; reset rate limiter."""
     monkeypatch.setattr(runtime, "_SECRETS_PATH", str(tmp_path / "secrets.json"))
     monkeypatch.setattr(runtime, "_overrides", {})
-    monkeypatch.setattr(memory, "_PATH", str(tmp_path / "brain.json"))
-    monkeypatch.setattr(memory, "_neurons", {})
+    monkeypatch.setattr(memory.main, "dir", str(tmp_path / "brain"))
+    monkeypatch.setattr(memory.code, "dir", str(tmp_path / "codebrain"))
+    memory.main._neurons = {}
+    memory.code._neurons = {}
     osint._HITS.clear()
     # Never spawn the background ingest loop or hit the network during tests.
     monkeypatch.setenv("JARVIS_AUTO_INGEST", "0")
@@ -461,12 +463,22 @@ def test_ingest_heuristic_weight_for_hot_news(monkeypatch):
     assert hot >= 9 and hot > mild      # conflict + global + hot keywords → high
 
 
-def test_memory_persists_to_disk(tmp_path, monkeypatch):
-    path = str(tmp_path / "b.json")
-    monkeypatch.setattr(memory, "_PATH", path)
-    monkeypatch.setattr(memory, "_neurons", {})
-    memory.add("Persistent neuron")
-    assert os.path.exists(path)
+def test_memory_persists_as_markdown(tmp_path, monkeypatch):
+    d = str(tmp_path / "b")
+    monkeypatch.setattr(memory.main, "dir", d)
+    memory.main._neurons = {}
+    nid = memory.add("Persistent neuron", body="With more detail in the body.")
+    files = [f for f in os.listdir(d) if f.endswith(".md")]
+    assert files and nid + ".md" in files
+    content = (tmp_path / "b" / (nid + ".md")).read_text()
+    assert content.startswith("---") and "Persistent neuron" in content and "more detail" in content
+
+
+def test_second_code_brain_is_separate(monkeypatch):
+    memory.code.add("Use snake_case for module names", kind="convention", weight=7)
+    assert memory.code.stats()["neurons"] == 1
+    assert memory.main.stats()["neurons"] == 0          # brains are independent
+    assert memory.get("code") is memory.code
 
 
 def test_memory_endpoints(client):
@@ -843,6 +855,31 @@ def test_devagent_keeps_change_when_tests_cannot_run(tmp_path, monkeypatch):
     out = devagent.develop("edit module")
     assert out["rolled_back"] is False                       # not rolled back
     assert (tmp_path / "module.py").read_text() == "VALID = 1\n"   # change kept
+
+
+def test_devagent_uses_code_brain(tmp_path, monkeypatch):
+    monkeypatch.setenv("JARVIS_ENABLE_DEVAGENT", "1")
+    monkeypatch.setattr(devagent, "REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(deepseek.config, "DEEPSEEK_API_KEY", "sk-x")
+    monkeypatch.setattr(devagent, "_git_diff", lambda: "")
+    monkeypatch.setattr(devagent, "_run_tests", lambda: {"ran": True, "passed": True, "output": "ok"})
+    js = __import__("json")
+    seq = iter([("save_knowledge",
+                 {"text": "Bump the service-worker VERSION on any asset change", "tags": ["sw"]})])
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        try:
+            name, args = next(seq)
+            return _FakeResp({"choices": [{"message": {"role": "assistant", "content": None,
+                "tool_calls": [{"id": "c", "type": "function",
+                                "function": {"name": name, "arguments": js.dumps(args)}}]}}]})
+        except StopIteration:
+            return _FakeResp({"choices": [{"message": {"role": "assistant", "content": "saved a note"}}]})
+    monkeypatch.setattr(deepseek.requests, "post", fake_post)
+
+    devagent.develop("learn the service worker convention")
+    assert memory.code.recall("service worker", k=1)   # written to the CODE brain
+    assert memory.main.stats()["neurons"] == 0          # not the main brain
 
 
 def test_run_tests_flags_missing_pytest(monkeypatch):

@@ -22,7 +22,7 @@ import threading
 from datetime import datetime, timezone
 from typing import Dict, List
 
-from jarvis import deepseek, runtime
+from jarvis import deepseek, memory, runtime
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _BLOCKED_DIRS = {".git", ".venv", "venv", "env", "__pycache__",
@@ -217,6 +217,19 @@ SCHEMA: List[Dict] = [
         "description": "Undo all of this session's file changes, restoring the previous versions. "
                        "Use if your changes broke things and you want a clean slate.",
         "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {
+        "name": "recall_knowledge",
+        "description": "Search the CODE brain for prior coding knowledge, conventions, "
+                       "architecture notes and lessons about this codebase.",
+        "parameters": {"type": "object", "properties": {
+            "query": {"type": "string"}}, "required": ["query"]}}},
+    {"type": "function", "function": {
+        "name": "save_knowledge",
+        "description": "Persist a durable coding lesson / convention / architecture note to the "
+                       "CODE brain so future tasks remember it.",
+        "parameters": {"type": "object", "properties": {
+            "text": {"type": "string"}, "tags": {"type": "array", "items": {"type": "string"}}},
+            "required": ["text"]}}},
 ]
 
 _SYSTEM = (
@@ -229,10 +242,12 @@ _SYSTEM = (
     "repo and any extra workspace roots the operator configured — use absolute "
     "paths for files outside the repo. To scaffold a NEW project outside Jarvis, "
     "make_dir the project folder under a workspace root, then write_file its "
-    "files. Never touch secrets or .git. When done, reply with a concise summary "
-    "of what you changed and why (no tool call). NOTE: the Jarvis test suite only "
-    "gates changes to the Jarvis repo; if it fails after you edit Jarvis files, "
-    "those changes are rolled back."
+    "files. Never touch secrets or .git. You have a CODE brain: recall_knowledge "
+    "before working and save_knowledge to record durable lessons, conventions and "
+    "architecture notes about this codebase for future tasks. When done, reply "
+    "with a concise summary of what you changed and why (no tool call). NOTE: the "
+    "Jarvis test suite only gates changes to the Jarvis repo; if it fails after "
+    "you edit Jarvis files, those changes are rolled back."
 )
 
 
@@ -307,11 +322,27 @@ def develop(task: str, max_rounds: int = 14) -> Dict:
         rec("revert_all", f"{len(restored)} files")
         return {"reverted": restored}
 
+    def recall_knowledge(query: str = ""):
+        rec("recall_knowledge", query)
+        return memory.code.recall(query, k=8)
+
+    def save_knowledge(text: str = "", tags=None):
+        rec("save_knowledge", text)
+        nid = memory.code.add(text, kind="knowledge", tags=tags, weight=6,
+                              meta={"source": "DEV agent"})
+        return {"saved": bool(nid)}
+
     impls = {"list_files": list_files, "read_file": read_file, "make_dir": make_dir,
              "write_file": write_file, "run_tests": run_tests, "git_diff": git_diff,
-             "revert_all": revert_all}
+             "revert_all": revert_all, "recall_knowledge": recall_knowledge,
+             "save_knowledge": save_knowledge}
 
-    messages = [{"role": "system", "content": _SYSTEM}, {"role": "user", "content": "TASK: " + task}]
+    # Seed the task with any relevant prior coding knowledge from the CODE brain.
+    prior = memory.code.recall(task, k=6)
+    seed = ("\n\nPRIOR CODING KNOWLEDGE (from your code brain):\n- "
+            + "\n- ".join(p["text"] for p in prior)) if prior else ""
+    messages = [{"role": "system", "content": _SYSTEM},
+                {"role": "user", "content": "TASK: " + task + seed}]
     try:
         result = deepseek.complete_with_tools(messages, SCHEMA, impls,
                                               temperature=0.2, max_tokens=1600, max_rounds=max_rounds)

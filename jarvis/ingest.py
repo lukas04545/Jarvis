@@ -160,17 +160,18 @@ def ingest_once(limit: int = 24) -> Dict:
                 count += 1
     else:
         for it in items:
-            # Store more than the headline: headline + a context snippet, plus
-            # source/region/topic/link metadata for inspection and recall.
-            snippet = (it.get("body") or it.get("summary") or "").strip()
-            snippet = re.sub(r"\s+", " ", snippet)[:240]
+            # text = headline + short context; body = the full scraped article
+            # (more info), saved into the neuron's Markdown body.
+            full = re.sub(r"\s+", " ", (it.get("body") or it.get("summary") or "")).strip()
+            snippet = full[:240]
             text = f"{it['title']} — {snippet}" if snippet else it["title"]
-            kws = re.findall(r"[a-z0-9]{4,}", snippet.lower())[:6]
+            kws = re.findall(r"[a-z0-9]{4,}", full.lower())[:6]
             tags = [it["topic"].lower(), it["region"].lower()] + kws[:4]
             meta = {"source": it.get("source", ""), "region": it.get("region", ""),
                     "topic": it.get("topic", ""), "link": it.get("link", ""),
                     "time": it.get("time", "")}
-            if memory.add(text, kind="news", tags=tags, weight=_heuristic_weight(it), meta=meta):
+            if memory.add(text, kind="news", tags=tags, weight=_heuristic_weight(it),
+                          meta=meta, body=full):
                 count += 1
 
     neurons = memory.stats()["neurons"]

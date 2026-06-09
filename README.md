@@ -34,7 +34,7 @@
 | **⌬ Agent Mesh** | A multi-agent harness: Director J.A.R.V.I.S. routes a tasking to **13 specialist subagents** (GEOINT, ECONINT, GEOPHYS, CYBER, ORACLE, OSINT, MEDINT, ENERGY, CLIMATE, SENTINEL, REDCELL, RECON, CORTEX), each with its own persona and data tools, run **concurrently** over DeepSeek and streamed live (SSE) — then fused into one attributed briefing. |
 | **⊟ Device Sensors** | Consent-gated access to the operator's **own** device via standard browser APIs: memory/hardware/screen/network/power telemetry, **screen capture** (`getDisplayMedia`, frames stay local), and **voice input** (Web Speech API → JARVIS) plus a local input-activity meter. Telemetry syncs to the **SENTINEL** agent. See [Ethics & scope](#ethics--scope). |
 | **👁 JARVIS Vision** | Makes JARVIS *see* the shared screen — **on-device** OCR (Tesseract.js) extracts the on-screen text and a pixel-level visual summary (resolution, theme, dominant colour); the image never leaves the device. Press **ASK JARVIS** to send the extracted text to the AI for analysis. Multi-language (EN/DE/ES/FR) for both speech-to-text and OCR. |
-| **✺ Neural Brain (persistent memory)** | A persistent associative memory rendered as a rotating **3D** network: each memory is a **neuron** (news neurons **colour-coded by topic** with a legend), shared keywords/entities form **synapses** that connect automatically. Selecting a neuron highlights its connections; hubs are labelled. **DeepSeek has full tool access** — it can recall, search and save memories itself — so it builds continuity across sessions. |
+| **✺ Neural Brain (persistent memory)** | A persistent associative memory rendered as a rotating **3D** network: each memory is a **neuron** (news neurons **colour-coded by topic**, sized/zoom-gated by importance), stored as a **Markdown file** (JSON frontmatter + a rich body) and linked by **synapses**. **Two brains** — `main` (intelligence/news/chat) and `code` (the DEV agent's coding knowledge) — toggle in the UI. **DeepSeek has full tool access** to the main brain (recall/search/save) and the DEV agent reads/writes the code brain. |
 | **⟲ Continuous learning** | A background pipeline **scrapes the global news**, **distils each batch with DeepSeek** into intelligence facts, and imprints them as **auto-connecting news neurons** — which the **ORACLE reads when forecasting**, so predictions improve as the brain learns. Runs automatically (or `INGEST NEWS NOW`). |
 | **⊠ RECON (email-exposure OSINT)** | Account-discovery (**holehe**-style) + **breach-directory** lookup for an email's public exposure. Authorised/defensive use only — requires a consent acknowledgement, one address at a time, and returns **account-existence + breach metadata only (never passwords or leaked records)**. See [Ethics & scope](#ethics--scope). |
 
@@ -134,7 +134,7 @@ jarvis/
   agents.py             multi-agent harness (Director + 13 specialist subagents)
   devagent.py           self-coding agent (repo-confined file tools + tests)
   braintools.py         brain tools exposed to DeepSeek (recall/save/stats)
-  memory.py             persistent neural memory (neurons + synapses)
+  memory.py             persistent memory — main + code brains, Markdown files
   ingest.py             news→brain learning loop (scrape → DeepSeek → neurons)
   osint.py              email-exposure recon (holehe + breach metadata)
   device.py             device-telemetry store (in-memory, sanitised, local)

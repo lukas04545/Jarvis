@@ -3,6 +3,8 @@
 .jarvis_secrets.json
 .jarvis_brain.json
 .jarvis_brain.json.tmp
+.jarvis_brain/
+.jarvis_codebrain/
 
 # Python
 __pycache__/

@@ -107,22 +107,25 @@ def api_osint():
 
 @app.route("/api/memory", methods=["GET"])
 def api_memory():
-    return jsonify({**memory.graph(), "stats": memory.stats()})
+    brain = memory.get(request.args.get("brain", "main"))
+    return jsonify({**brain.graph(), "stats": brain.stats()})
 
 
 @app.route("/api/memory", methods=["POST"])
 def api_memory_add():
     body = request.get_json(silent=True) or {}
+    brain = memory.get(body.get("brain", "main"))
     if body.get("recall"):
-        return jsonify({"memories": memory.recall(str(body["recall"]), k=int(body.get("k", 6)))})
-    nid = memory.add(str(body.get("text", "")), kind=str(body.get("kind", "note")),
-                     tags=body.get("tags"))
-    return jsonify({"ok": bool(nid), "id": nid, **memory.graph()})
+        return jsonify({"memories": brain.recall(str(body["recall"]), k=int(body.get("k", 6)))})
+    nid = brain.add(str(body.get("text", "")), kind=str(body.get("kind", "note")),
+                    tags=body.get("tags"), body=body.get("body"))
+    return jsonify({"ok": bool(nid), "id": nid, **brain.graph()})
 
 
 @app.route("/api/memory/<nid>", methods=["DELETE"])
 def api_memory_forget(nid):
-    return jsonify({"ok": memory.forget(nid)})
+    brain = memory.get(request.args.get("brain", "main"))
+    return jsonify({"ok": brain.forget(nid)})
 
 
 @app.route("/api/ingest", methods=["GET"])

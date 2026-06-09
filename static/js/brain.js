@@ -33,13 +33,14 @@ window.JarvisBrain = (() => {
   let nodes = [], edges = [], byId = {};
   let selected = null;
   let rotX = -0.3, rotY = 0, zoom = 1.2, autoRotate = true;
+  let currentBrain = "main";
 
   function color(kind) { return KIND_COLORS[kind] || "#8aa0b4"; }
 
   // ── data ──────────────────────────────────────────────────────────────
   async function load() {
     try {
-      const g = await (await fetch("/api/memory")).json();
+      const g = await (await fetch("/api/memory?brain=" + currentBrain)).json();
       sync(g); renderStats(g);
     } catch (e) { /* ignore */ }
     refreshIngest();
@@ -268,18 +269,21 @@ window.JarvisBrain = (() => {
     if (m.link) metaHtml += `<div class="kv"><span>LINK</span><b><a href="${esc(m.link)}" target="_blank" rel="noopener">open ↗</a></b></div>`;
     const hcol = nodeColor(n);
     const label = ((n.meta && n.meta.topic) || n.kind).toUpperCase();
+    const moreInfo = n.body && n.body.trim() && n.body.trim() !== n.text.trim()
+      ? `<div class="brain-body">${esc(n.body)}</div>` : "";
     el.innerHTML =
       `<div class="vision-head" style="color:${hcol}">⬡ ${esc(label)} NEURON</div>` +
       `<div class="brain-mem">${esc(n.text)}</div>` +
+      moreInfo +
       metaHtml +
       `<div class="news-src">${n.degree || 0} synapses · activated ${n.activations || 1}× · ${new Date((n.created || 0) * 1000).toISOString().slice(0, 16)}Z</div>` +
       `<button class="btn-ghost" id="brain-forget">✕ FORGET</button>`;
     const b = $("brain-forget");
-    if (b) b.addEventListener("click", async () => { await fetch("/api/memory/" + n.id, { method: "DELETE" }); selected = null; el.innerHTML = "Select a neuron to inspect the memory."; load(); });
+    if (b) b.addEventListener("click", async () => { await fetch("/api/memory/" + n.id + "?brain=" + currentBrain, { method: "DELETE" }); selected = null; el.innerHTML = "Select a neuron to inspect the memory."; load(); });
   }
   async function imprint(text) {
     text = (text || "").trim(); if (!text) return;
-    await fetch("/api/memory", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, kind: "note" }) });
+    await fetch("/api/memory", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, kind: "note", brain: currentBrain }) });
     $("brain-input").value = ""; load();
   }
 
@@ -308,6 +312,13 @@ window.JarvisBrain = (() => {
       $("brain-refresh").addEventListener("click", load);
       const ing = document.getElementById("ingest-now");
       if (ing) ing.addEventListener("click", ingestNow);
+      const tog = document.getElementById("brain-toggle");
+      if (tog) tog.addEventListener("click", (e) => {
+        const b = e.target.closest(".bt-btn"); if (!b) return;
+        currentBrain = b.dataset.brain; selected = null;
+        tog.querySelectorAll(".bt-btn").forEach((x) => x.classList.toggle("active", x === b));
+        load();
+      });
       inited = true;
     }
     resize(); load(); startPoll();
