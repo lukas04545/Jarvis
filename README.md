@@ -139,6 +139,7 @@ jarvis/
   osint.py              email-exposure recon (holehe + breach metadata)
   device.py             device-telemetry store (in-memory, sanitised, local)
   briefing.py           AI briefing synthesis from the live picture
+  http.py               shared resilient HTTP session (pooling + retries)
   cache.py              thread-safe TTL cache (stale-on-error)
   fallback.py           SIMULATED sample datasets
 templates/index.html    terminal + globe layout, tabs, settings modal

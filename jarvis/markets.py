@@ -17,6 +17,7 @@ from typing import Dict, List
 import requests
 
 from config import config
+from jarvis import http
 from jarvis.cache import cache
 
 COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/price"
@@ -34,7 +35,7 @@ CRYPTO_IDS = {"bitcoin": "BTC", "ethereum": "ETH", "solana": "SOL"}
 
 
 def _crypto() -> List[Dict]:
-    resp = requests.get(
+    resp = http.get(
         COINGECKO_URL,
         params={"ids": ",".join(CRYPTO_IDS), "vs_currencies": "usd",
                 "include_24hr_change": "true"},
@@ -57,7 +58,7 @@ def _crypto() -> List[Dict]:
 
 def _stooq() -> List[Dict]:
     syms = ",".join(STOOQ_SYMBOLS)
-    resp = requests.get(
+    resp = http.get(
         STOOQ_URL,
         params={"s": syms, "f": "sd2t2ohlcvn", "h": "", "e": "csv"},
         timeout=config.HTTP_TIMEOUT,

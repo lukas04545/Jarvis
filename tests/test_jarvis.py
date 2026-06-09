@@ -660,6 +660,38 @@ def test_complete_with_tools_executes_and_saves(monkeypatch):
     assert memory.recall("terse briefings", k=1)   # DeepSeek actually wrote to the brain
 
 
+def test_http_session_pooled_with_ua():
+    from jarvis import http
+    assert "User-Agent" in http.session.headers
+    assert "https://" in http.session.adapters and "http://" in http.session.adapters
+
+
+def test_stream_with_tools_offline_yields_stub(monkeypatch):
+    monkeypatch.setattr(deepseek.config, "DEEPSEEK_API_KEY", "")
+    evs = list(deepseek.stream_with_tools([{"role": "user", "content": "hi"}],
+                                          braintools.SCHEMA, braintools.IMPLS))
+    assert "OFFLINE MODE" in "".join(e.get("delta", "") for e in evs)
+
+
+def test_stream_with_tools_runs_tool_then_streams(monkeypatch):
+    monkeypatch.setattr(deepseek.config, "DEEPSEEK_API_KEY", "sk-x")
+    calls = {"n": 0}
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return _FakeResp({"choices": [{"message": {"role": "assistant", "content": None,
+                "tool_calls": [{"id": "c", "type": "function", "function": {
+                    "name": "recall_memory", "arguments": '{"query":"x"}'}}]}}]})
+        return _FakeResp({"choices": [{"message": {"role": "assistant", "content": "Hello Operator."}}]})
+    monkeypatch.setattr(deepseek.requests, "post", fake_post)
+
+    evs = list(deepseek.stream_with_tools([{"role": "user", "content": "hi"}],
+                                          braintools.SCHEMA, braintools.IMPLS))
+    assert any("recall_memory" in (e.get("tool") or []) for e in evs)         # tool event streamed
+    assert "Hello Operator." in "".join(e.get("delta", "") for e in evs)      # answer streamed
+
+
 def test_chat_endpoint_returns_tools_used(client, monkeypatch):
     monkeypatch.setattr(app_module.deepseek, "complete_with_tools",
                         lambda *a, **k: {"text": "ok", "tools_used": [{"name": "recall_memory", "args": {}}]})

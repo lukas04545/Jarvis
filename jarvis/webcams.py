@@ -22,6 +22,7 @@ from typing import Dict, List
 import requests
 
 from config import config
+from jarvis import http
 from jarvis.cache import cache
 
 TFL_JAMCAM_URL = "https://api.tfl.gov.uk/Place/Type/JamCam"
@@ -62,7 +63,7 @@ def _prop(place: Dict, key: str) -> str | None:
 
 
 def _fetch_tfl() -> List[Dict]:
-    resp = requests.get(
+    resp = http.get(
         TFL_JAMCAM_URL,
         timeout=config.HTTP_TIMEOUT,
         headers={"User-Agent": "JARVIS-Terminal/1.0"},

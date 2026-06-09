@@ -218,23 +218,43 @@
 
   async function streamChat(message) {
     const line = addLine("jarvis", "");
-    line.innerHTML = '<span class="cursor">▌</span> accessing memory…';
+    const cursor = '<span class="cursor">▌</span>';
+    line.innerHTML = cursor + " thinking…";
+    let buf = "", savedMemory = false;
     try {
-      // Tool-enabled chat: DeepSeek can recall/search/save the brain itself.
-      const r = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      // Streamed, tool-enabled chat: brain tool steps stream in, then the answer.
+      const r = await fetch("/api/chat/stream", {
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message, with_context: true }),
       });
-      const d = await r.json();
-      if (d.error) { line.className = "line err"; line.textContent = "ERROR: " + d.error; return; }
-      line.textContent = d.reply || "(no response)";
-      const tools = d.tools_used || [];
-      if (tools.length) {
-        const names = tools.map((t) => t.name.replace("_memory", "").replace("brain_", "")).join(", ");
-        addLine("sys", `🧠 brain: ${names}`);
-        if (window.JarvisBrain && tools.some((t) => t.name === "save_memory")) JarvisBrain.reload();
+      const reader = r.body.getReader();
+      const dec = new TextDecoder();
+      let sse = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        sse += dec.decode(value, { stream: true });
+        const parts = sse.split("\n\n");
+        sse = parts.pop();
+        for (const p of parts) {
+          const m = p.match(/^data: (.*)$/m);
+          if (!m || m[1] === "[DONE]") continue;
+          let ev; try { ev = JSON.parse(m[1]); } catch { continue; }
+          if (ev.error) { line.className = "line err"; line.textContent = "ERROR: " + ev.error; return; }
+          if (ev.tool) {
+            const names = ev.tool.map((t) => t.replace("_memory", "").replace("brain_", "")).join(", ");
+            line.innerHTML = (buf ? esc(buf) : "") + ` <span class="news-src">🧠 ${esc(names)}…</span> ` + cursor;
+            if (ev.tool.includes("save_memory")) savedMemory = true;
+          }
+          if (ev.delta) {
+            buf += ev.delta;
+            line.innerHTML = esc(buf) + cursor;
+            log.scrollTop = log.scrollHeight;
+          }
+        }
       }
+      line.textContent = buf || "(no response)";
+      if (savedMemory && window.JarvisBrain) JarvisBrain.reload();
     } catch (e) {
       line.className = "line err";
       line.textContent = "Link error: " + e.message;

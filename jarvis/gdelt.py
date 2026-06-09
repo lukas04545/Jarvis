@@ -15,6 +15,7 @@ from typing import Dict
 import requests
 
 from config import config
+from jarvis import http
 from jarvis.cache import cache
 
 DOC_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
@@ -29,7 +30,7 @@ QUERIES = {
 
 def _timeline_trend(query: str) -> Dict:
     """Return latest coverage volume and its trend vs the recent mean."""
-    resp = requests.get(
+    resp = http.get(
         DOC_URL,
         params={"query": query, "mode": "timelinevol", "format": "json", "timespan": "7d"},
         timeout=config.HTTP_TIMEOUT,
@@ -48,7 +49,7 @@ def _timeline_trend(query: str) -> Dict:
 
 
 def _tone(query: str) -> float:
-    resp = requests.get(
+    resp = http.get(
         DOC_URL,
         params={"query": query, "mode": "tonechart", "format": "json", "timespan": "3d"},
         timeout=config.HTTP_TIMEOUT,

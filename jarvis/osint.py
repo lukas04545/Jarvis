@@ -33,6 +33,7 @@ from typing import Dict, List
 import requests
 
 from config import config
+from jarvis import http
 from jarvis import runtime
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -106,7 +107,7 @@ def _simulated_breaches(email: str) -> List[Dict]:
 
 
 def _hibp_breaches(email: str, key: str) -> List[Dict]:
-    resp = requests.get(
+    resp = http.get(
         HIBP_URL.format(requests.utils.quote(email)),
         headers={"hibp-api-key": key, "user-agent": "JARVIS-Terminal/1.0"},
         params={"truncateResponse": "false"},

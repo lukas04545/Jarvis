@@ -14,6 +14,7 @@ without credentials.
 from __future__ import annotations
 
 import json
+import re
 from typing import Dict, Iterator, List
 
 import requests
@@ -199,6 +200,68 @@ def complete_with_tools(
     except DeepSeekError:
         text = "I gathered context from memory but couldn't finalise a reply."
     return {"text": text, "tools_used": used}
+
+
+def stream_with_tools(
+    messages: List[Dict],
+    tools: List[Dict],
+    impls: Dict,
+    *,
+    temperature: float = 0.4,
+    max_tokens: int = 900,
+    max_rounds: int = 4,
+) -> Iterator[Dict]:
+    """Streamed tool-calling chat.
+
+    Yields event dicts: ``{"tool": [names]}`` when the model invokes tools, and
+    ``{"delta": text}`` chunks for the answer. Tool rounds resolve first, then
+    the final reply is streamed out, so the console feels live again while the
+    model still has full brain access.
+    """
+    if not runtime.ai_online():
+        for word in _offline_reply(messages).split(" "):
+            yield {"delta": word + " "}
+        return
+
+    msgs = list(messages)
+    for _ in range(max_rounds):
+        payload = {
+            "model": config.DEEPSEEK_MODEL, "messages": msgs,
+            "temperature": temperature, "max_tokens": max_tokens,
+            "tools": tools, "tool_choice": "auto", "stream": False,
+        }
+        try:
+            resp = requests.post(f"{config.DEEPSEEK_BASE_URL}/chat/completions",
+                                 headers=_headers(), json=payload, timeout=90)
+            resp.raise_for_status()
+            msg = resp.json()["choices"][0]["message"]
+        except (requests.RequestException, KeyError, ValueError) as exc:
+            yield {"error": f"DeepSeek error: {exc}"}
+            return
+
+        calls = msg.get("tool_calls")
+        if not calls:
+            for chunk in re.findall(r"\S+\s*|\s+", msg.get("content") or ""):
+                yield {"delta": chunk}
+            return
+
+        yield {"tool": [(c.get("function") or {}).get("name", "") for c in calls]}
+        msgs.append(msg)
+        for tc in calls:
+            name = (tc.get("function") or {}).get("name", "")
+            try:
+                args = json.loads((tc["function"].get("arguments") or "{}"))
+            except (json.JSONDecodeError, KeyError):
+                args = {}
+            fn = impls.get(name)
+            try:
+                result = fn(**args) if fn else f"unknown tool: {name}"
+            except Exception as exc:
+                result = f"tool error: {exc}"
+            msgs.append({"role": "tool", "tool_call_id": tc.get("id"),
+                         "content": json.dumps(result)[:2500]})
+
+    yield {"delta": "(reached the reasoning limit, Operator.)"}
 
 
 def build_messages(user_prompt: str, context: str | None = None) -> List[Dict[str, str]]:

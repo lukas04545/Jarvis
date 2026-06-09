@@ -24,6 +24,7 @@ from typing import Dict, List, Tuple
 import requests
 
 from config import config
+from jarvis import http
 from jarvis.cache import cache
 
 STOOQ_CSV = "https://stooq.com/q/d/l/"
@@ -46,7 +47,7 @@ def _stooq_symbol(ticker: str) -> str:
 
 def _fetch_history(ticker: str, limit: int = 260) -> Tuple[List[float], List[str]]:
     sym = _stooq_symbol(ticker)
-    resp = requests.get(STOOQ_CSV, params={"s": sym, "i": "d"}, timeout=config.HTTP_TIMEOUT)
+    resp = http.get(STOOQ_CSV, params={"s": sym, "i": "d"}, timeout=config.HTTP_TIMEOUT)
     resp.raise_for_status()
     closes: List[float] = []
     dates: List[str] = []

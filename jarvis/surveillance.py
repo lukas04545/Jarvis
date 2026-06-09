@@ -18,6 +18,7 @@ from typing import Dict, List
 import requests
 
 from config import config
+from jarvis import http
 from jarvis.cache import cache
 
 USGS_URL = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson"
@@ -36,7 +37,7 @@ def _threat_level(magnitude: float) -> str:
 
 
 def _seismic() -> Dict:
-    resp = requests.get(USGS_URL, timeout=config.HTTP_TIMEOUT)
+    resp = http.get(USGS_URL, timeout=config.HTTP_TIMEOUT)
     resp.raise_for_status()
     feats = resp.json().get("features", [])
     events: List[Dict] = []
@@ -70,7 +71,7 @@ def _seismic() -> Dict:
 
 
 def _orbital() -> Dict:
-    resp = requests.get(ISS_URL, timeout=config.HTTP_TIMEOUT)
+    resp = http.get(ISS_URL, timeout=config.HTTP_TIMEOUT)
     resp.raise_for_status()
     d = resp.json()
     return {
@@ -84,7 +85,7 @@ def _orbital() -> Dict:
 
 
 def _solar() -> Dict:
-    resp = requests.get(NOAA_ALERTS_URL, timeout=config.HTTP_TIMEOUT)
+    resp = http.get(NOAA_ALERTS_URL, timeout=config.HTTP_TIMEOUT)
     resp.raise_for_status()
     rows = resp.json()
     alerts: List[Dict] = []

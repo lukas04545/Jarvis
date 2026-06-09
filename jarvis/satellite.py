@@ -20,6 +20,7 @@ from typing import Dict, List
 import requests
 
 from config import config
+from jarvis import http
 from jarvis.cache import cache
 
 EONET_URL = "https://eonet.gsfc.nasa.gov/api/v3/events"
@@ -38,7 +39,7 @@ _CAT_TAG = {
 
 
 def _eonet(limit: int = 40) -> Dict:
-    resp = requests.get(EONET_URL, params={"status": "open", "limit": limit}, timeout=config.HTTP_TIMEOUT)
+    resp = http.get(EONET_URL, params={"status": "open", "limit": limit}, timeout=config.HTTP_TIMEOUT)
     resp.raise_for_status()
     events: List[Dict] = []
     for ev in resp.json().get("events", []):
@@ -75,7 +76,7 @@ def _eonet(limit: int = 40) -> Dict:
 
 
 def _epic() -> Dict:
-    resp = requests.get(EPIC_URL, timeout=config.HTTP_TIMEOUT)
+    resp = http.get(EPIC_URL, timeout=config.HTTP_TIMEOUT)
     resp.raise_for_status()
     rows = resp.json()
     if not rows:
@@ -96,7 +97,7 @@ def _epic() -> Dict:
 
 
 def _catalog() -> Dict:
-    resp = requests.get(CELESTRAK_URL, timeout=config.HTTP_TIMEOUT)
+    resp = http.get(CELESTRAK_URL, timeout=config.HTTP_TIMEOUT)
     resp.raise_for_status()
     rows = resp.json()
     return {"status": "ONLINE", "active_satellites": len(rows)}

@@ -19,6 +19,7 @@ import feedparser
 import requests
 
 from config import config
+from jarvis import http
 from jarvis.cache import cache
 
 def _g(query: str) -> str:
@@ -106,7 +107,7 @@ def _entry_time(entry) -> float:
 def _fetch_feed(label: str, region: str, url: str) -> List[Dict]:
     # feedparser can fetch directly, but going through requests lets us enforce
     # a timeout and a UA that some CDNs require.
-    resp = requests.get(
+    resp = http.get(
         url,
         timeout=config.HTTP_TIMEOUT,
         headers={"User-Agent": "JARVIS-Terminal/1.0 (+intelligence-feed)"},

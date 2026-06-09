@@ -325,11 +325,9 @@ def api_chat_stream():
     messages = deepseek.build_messages(prompt, context)
 
     def event_stream() -> Iterator[str]:
-        try:
-            for delta in deepseek.stream(messages):
-                yield f"data: {json.dumps({'delta': delta})}\n\n"
-        except deepseek.DeepSeekError as exc:
-            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+        # Streamed + full brain access: tool events, then the answer streams in.
+        for ev in deepseek.stream_with_tools(messages, braintools.SCHEMA, braintools.IMPLS):
+            yield f"data: {json.dumps(ev)}\n\n"
         yield "data: [DONE]\n\n"
 
     return Response(

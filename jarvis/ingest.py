@@ -29,6 +29,7 @@ from typing import Dict, List
 import requests
 
 from config import config
+from jarvis import http
 from jarvis import deepseek, memory, news, runtime
 
 _STATUS: Dict = {"last_run": None, "runs": 0, "last_count": 0,
@@ -57,7 +58,7 @@ def _fetch_article(url: str) -> str:
     if not url or os.environ.get("JARVIS_SCRAPE_ARTICLES", "1") == "0":
         return ""
     try:
-        r = requests.get(url, timeout=config.HTTP_TIMEOUT, headers={"User-Agent": _UA})
+        r = http.get(url, timeout=config.HTTP_TIMEOUT, headers={"User-Agent": _UA})
         if r.status_code != 200 or "html" not in r.headers.get("content-type", "").lower():
             return ""
         return _clean_html(r.text)[:800]
