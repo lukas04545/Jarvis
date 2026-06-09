@@ -9,7 +9,7 @@
   let activeTopic = "";
   let lastNews = [];
 
-  // ── helpers ──────────────────────────────────────────────────────────
+  // ── helpers ──────────────────────────────────────────────────────────────────
   const esc = (s) =>
     String(s).replace(/[&<>"]/g, (c) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -37,14 +37,14 @@
     el.classList.toggle("stale", simulated);
   }
 
-  // ── clock ────────────────────────────────────────────────────────────
+  // ── clock ──────────────────────────────────────────────────────────────────
   function tickClock() {
     $("clock").textContent = new Date().toISOString().slice(11, 19);
   }
   setInterval(tickClock, 1000);
   tickClock();
 
-  // ── status ───────────────────────────────────────────────────────────
+  // ── status ─────────────────────────────────────────────────────────────────
   async function loadStatus() {
     try {
       const s = await getJSON("/api/status");
@@ -57,7 +57,7 @@
     }
   }
 
-  // ── news ─────────────────────────────────────────────────────────────
+  // ── news ──────────────────────────────────────────────────────────────────
   function renderNews() {
     const list = $("news-list");
     const items = activeTopic
@@ -105,7 +105,7 @@
     }
   }
 
-  // ── surveillance ─────────────────────────────────────────────────────
+  // ── surveillance ─────────────────────────────────────────────────────────────────
   function renderSurv(s) {
     const seismic = s.seismic || {};
     const orbital = s.orbital || {};
@@ -167,7 +167,7 @@
     }
   }
 
-  // ── console ──────────────────────────────────────────────────────────
+  // ── console ──────────────────────────────────────────────────────────────────
   const log = $("console-log");
 
   function addLine(cls, text) {
@@ -200,7 +200,7 @@
     "  DEVICE          local device sensors (memory/screen/voice input)",
     "  REFRESH         reload all feeds",
     "  CLEAR           clear this console",
-    "  <anything else> talk to J.A.R.V.I.S. (DeepSeek)",
+    "  <anything else> talk to J.A.R.V.I.S. (AI console)",
   ].join("\n");
 
   async function doBrief() {
@@ -220,7 +220,6 @@
     const line = addLine("jarvis", "");
     line.innerHTML = '<span class="cursor">▌</span> accessing memory…';
     try {
-      // Tool-enabled chat: DeepSeek can recall/search/save the brain itself.
       const r = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -269,39 +268,33 @@
         showView("stocks"); return;
       default: {
         const rest = text.replace(/^\s*\S+\s*/, "").trim();
-        // AGENTS <task> / TASKFORCE <task> → deploy the multi-agent mesh.
         if (cmd === "AGENTS" || cmd === "TASKFORCE" || cmd.startsWith("AGENTS ") || cmd.startsWith("TASKFORCE ")) {
           addLine("sys", rest ? "Deploying agent mesh…" : "Opening agent mesh — enter a tasking.");
           showView("agents");
           if (rest) { $("agent-query").value = rest; setTimeout(() => runAgents(rest), 200); }
           return;
         }
-        // DEV <task> → self-coding agent.
         if (cmd === "DEV" || cmd.startsWith("DEV ")) {
           showView("dev");
           if (rest) { $("dev-task").value = rest; setTimeout(() => runDev(rest), 200); }
           return;
         }
-        // STOCK <ticker> → price forecast.
         if (cmd.startsWith("STOCK ") || cmd.startsWith("STOCKS ")) {
           showView("stocks");
           if (rest) { $("stock-ticker").value = rest; setTimeout(() => runStock(rest), 200); }
           return;
         }
-        // RECON <email> → email-exposure OSINT.
         if (cmd === "RECON" || cmd.startsWith("RECON ")) {
           showView("recon");
           if (rest) { $("recon-email").value = rest; addLine("sys", "Tick the authorisation box, then SCAN."); }
           else addLine("sys", "Opening RECON — enter an email you're authorised to check.");
           return;
         }
-        // REMEMBER <text> → imprint a memory neuron.
         if (cmd.startsWith("REMEMBER ") || cmd.startsWith("REMEMBER\t")) {
           fetch("/api/memory", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: rest, kind: "note" }) })
             .then(() => { addLine("sys", "Memory imprinted."); if (window.JarvisBrain) JarvisBrain.reload(); });
           return;
         }
-        // RECALL <query> → fetch related memories.
         if (cmd.startsWith("RECALL ")) {
           fetch("/api/memory", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ recall: rest }) })
             .then((r) => r.json()).then((d) => {
@@ -315,7 +308,7 @@
     }
   }
 
-  // ── wiring ───────────────────────────────────────────────────────────
+  // ── wiring ──────────────────────────────────────────────────────────────────
   $("cmd").addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       const v = e.target.value;
@@ -339,13 +332,12 @@
     if (btn) handleInput(btn.dataset.cmd);
   });
 
-  // Function keys F1–F6 (ignore while typing in a field)
   const FN = { F1: "HELP", F2: "NEWS", F3: "SURV", F4: "BRIEF", F5: "REFRESH", F6: "CLEAR" };
   document.addEventListener("keydown", (e) => {
     if (FN[e.key] && e.target.tagName !== "INPUT") { e.preventDefault(); handleInput(FN[e.key]); }
   });
 
-  // ── tabs (TERMINAL / GLOBE / FORECAST) ────────────────────────────────
+  // ── tabs ─────────────────────────────────────────────────────────────────────────────
   let globeReady = false;
   let forecastReady = false;
   function showView(name) {
@@ -395,7 +387,7 @@
     if (cb) JarvisGlobe.setLayer(cb.dataset.layer, cb.checked);
   });
 
-  // ── globe marker selection → intel detail / webcam viewer ─────────────
+  // ── globe marker selection ────────────────────────────────────────────────────────────
   function onGlobeSelect(marker, webcam) {
     const detail = $("globe-detail");
     const d = marker.data || {};
@@ -420,7 +412,7 @@
     detail.innerHTML = rows[marker.type] || esc(marker.label || "");
   }
 
-  // ── live satellite rail ───────────────────────────────────────────────
+  // ── live satellite rail ───────────────────────────────────────────────────────────────
   async function loadSatellite() {
     const box = $("sat-box");
     try {
@@ -447,7 +439,7 @@
     }
   }
 
-  // ── public webcams (directory + viewer) ───────────────────────────────
+  // ── public webcams ────────────────────────────────────────────────────────────────────
   let webcamTimer = null;
   function closeWebcam() {
     if (webcamTimer) { clearInterval(webcamTimer); webcamTimer = null; }
@@ -460,7 +452,6 @@
     v.hidden = false;
     const head = `<div class="wc-head">◉ ${esc(cam.title)} <button class="wc-close">✕</button></div>`;
     if (cam.image) {
-      // Public refreshing JPEG (e.g. TfL traffic cam). Poll with a cache-buster.
       const bust = () => esc(cam.image) + (cam.image.includes("?") ? "&" : "?") + "_t=" + Date.now();
       v.innerHTML = head +
         `<img class="wc-frame" id="wc-img" src="${bust()}" alt="${esc(cam.title)}" />` +
@@ -503,7 +494,7 @@
     if (cam) { openWebcam(cam); JarvisGlobe.select("w-" + cam.id); }
   });
 
-  // ── ORACLE: signals dashboard + forecast ──────────────────────────────
+  // ── ORACLE: signals dashboard + forecast ──────────────────────────────────────────────
   const DOMAIN_COLORS = {
     CONFLICT: "var(--red)", MARKETS: "var(--green)", POLITICS: "var(--cyan)",
     DISASTER: "var(--amber)", CYBER: "#ff5db1", TECH: "var(--magenta)",
@@ -515,7 +506,6 @@
     $("signals-meta").textContent =
       (sig.simulated ? "SIM · " : "") + `${sig.samples_in_baseline} baseline samples`;
 
-    // Domain momentum bars
     const dom = Object.entries(sig.domains || {})
       .sort((a, b) => (b[1].momentum - a[1].momentum) || (b[1].volume - a[1].volume));
     $("signal-domains").innerHTML = dom.map(([d, v]) => {
@@ -526,12 +516,10 @@
         <span class="sig-val">${v.volume} · ${v.level}</span></div>`;
     }).join("") || '<div class="news-src">no signal</div>';
 
-    // Anomalies
     $("signal-anomalies").innerHTML = (sig.anomalies || []).length
       ? sig.anomalies.map((a) => `<div class="anom">▲ ${esc(a)}</div>`).join("")
       : '<div class="news-src">no anomalies detected</div>';
 
-    // Markets
     const mk = sig.markets || {};
     $("markets-meta").textContent = mk.sentiment || "--";
     $("signal-markets").innerHTML =
@@ -543,7 +531,6 @@
                `<span class="${cls}">${m.chg >= 0 ? "+" : ""}${esc(m.chg)}%</span></div>`;
       }).join("");
 
-    // GDELT
     $("signal-gdelt").innerHTML = Object.entries(sig.gdelt || {}).map(([k, t]) => {
       if (t.error) return `<div class="news-src">${esc(k)}: offline</div>`;
       const toneCls = t.tone < -3 ? "down" : (t.tone > 1 ? "up" : "");
@@ -567,8 +554,8 @@
   function renderPredictions(fc) {
     const banner = $("forecast-banner");
     const method = fc.method === "ai+heuristic"
-      ? "AI (DeepSeek) + heuristic baseline"
-      : "heuristic baseline (paste a DeepSeek key in SETTINGS for AI forecasts)";
+      ? "AI + heuristic baseline"
+      : "heuristic baseline (add a free LLM key in SETTINGS for AI forecasts)";
     banner.innerHTML =
       `<span>${fc.simulated ? "⚠ SIMULATED SIGNALS · " : ""}method: ${esc(method)}</span>` +
       (fc.ai_error ? `<span class="err"> · AI: ${esc(fc.ai_error)}</span>` : "");
@@ -605,11 +592,11 @@
   async function runForecast() {
     const btn = $("forecast-run");
     btn.disabled = true;
-    $("predictions").innerHTML = '<div class="loading">ORACLE computing — fusing signals & querying DeepSeek…</div>';
+    $("predictions").innerHTML = '<div class="loading">ORACLE computing — fusing signals &amp; querying AI…</div>';
     try {
       const fc = await getJSON("/api/forecast");
       renderPredictions(fc);
-      renderSignals(fc.signals);   // forecast bundles fresh signals
+      renderSignals(fc.signals);
     } catch (e) {
       $("predictions").innerHTML = `<div class="err">forecast failed: ${esc(e.message)}</div>`;
     } finally {
@@ -618,7 +605,7 @@
   }
   $("forecast-run").addEventListener("click", runForecast);
 
-  // ── AGENT MESH (multi-agent harness, SSE streamed) ────────────────────
+  // ── AGENT MESH ────────────────────────────────────────────────────────────────────────────────
   const AGENT_COLORS = {
     GEOINT: "var(--red)", ECONINT: "var(--green)", GEOPHYS: "var(--amber)",
     CYBER: "#ff5db1", ORACLE: "#9d7bff",
@@ -677,8 +664,7 @@
                 const col = AGENT_COLORS[a.name] || "var(--cyan)";
                 return `<span class="plan-chip" style="color:${col};border-color:${col}" title="${esc(a.role)}">${esc(a.name)}</span>`;
               }).join("") +
-              (ev.online ? "" : ` <span class="agent-mode offline">offline — set a DeepSeek key for AI analysis</span>`);
-            // Pre-create pending cards in dispatch order.
+              (ev.online ? "" : ` <span class="agent-mode offline">offline — add a free LLM key in SETTINGS for AI analysis</span>`);
             grid.innerHTML = ev.plan.map((a) =>
               agentCardHTML(a.name, a.role, '<span class="cursor">▌</span> analysing…', "")).join("");
           } else if (ev.type === "agent") {
@@ -712,9 +698,9 @@
     if (e.key === "Enter") runAgents();
   });
 
-  // ── DEV AGENT (self-coding harness) ───────────────────────────────────
+  // ── DEV AGENT ───────────────────────────────────────────────────────────────────────────────
   let devReady = false, devBusy = false;
-  const DEV_ICON = { list_files: "▤", read_file: "▦", make_dir: "✚", write_file: "✎",
+  const DEV_ICON = { list_files: "╤", read_file: "▦", make_dir: "✚", write_file: "✎",
                      run_tests: "✓", git_diff: "Δ", revert_all: "↺", auto_rollback: "⟲" };
   async function loadDevStatus() {
     try {
@@ -781,7 +767,7 @@
     } catch (e) { $("dev-body").innerHTML = `<div class="err">rollback failed: ${esc(e.message)}</div>`; }
   });
 
-  // ── RECON (email-exposure OSINT) ──────────────────────────────────────
+  // ── RECON ─────────────────────────────────────────────────────────────────────────────────
   function reconGate() {
     const ok = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test($("recon-email").value.trim()) && $("recon-auth").checked;
     $("recon-run").disabled = !ok;
@@ -795,7 +781,7 @@
     if (e) $("recon-email").value = e;
     if (!$("recon-auth").checked) { $("recon-auth").focus(); return; }
     const body = $("recon-body");
-    body.innerHTML = '<div class="loading">scanning account directories & breach metadata…</div>';
+    body.innerHTML = '<div class="loading">scanning account directories &amp; breach metadata…</div>';
     try {
       const r = await fetch("/api/osint", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -803,14 +789,13 @@
       });
       const d = await r.json();
       if (d.error) { body.innerHTML = `<div class="err">${esc(d.error)}${d.notice ? " — " + esc(d.notice) : ""}</div>`; return; }
-      // Found accounts first, with category + a link to the service.
       const sorted = [...d.accounts].sort((a, b) => (b.exists === a.exists) ? 0 : (b.exists ? 1 : -1));
       const accounts = sorted.map((a) => {
         const name = a.exists && a.url
           ? `<a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.site)}</a>` : esc(a.site);
         const cat = a.category ? `<span class="rec-cat">${esc(a.category)}</span>` : "";
         const rl = a.rateLimit ? '<span class="rec-cat" style="color:var(--text-dim)">rate-limited</span>' : "";
-        return `<div class="rec-acct ${a.exists ? "yes" : "no"}"><span>${a.exists ? "◉" : "○"}</span> ${name} ${cat} ${rl}</div>`;
+        return `<div class="rec-acct ${a.exists ? "yes" : "no'}"><span>${a.exists ? "◉" : "○"}</span> ${name} ${cat} ${rl}</div>`;
       }).join("");
       const breaches = (d.breaches || []).map((b) =>
         `<div class="rec-breach"><b>${esc(b.name)}</b> <span class="news-src">${esc(b.date)} · ${Number(b.pwnCount).toLocaleString()} accts</span>` +
@@ -830,7 +815,7 @@
   $("recon-run").addEventListener("click", () => runRecon());
   $("recon-email").addEventListener("keydown", (e) => { if (e.key === "Enter" && !$("recon-run").disabled) runRecon(); });
 
-  // ── STOCKS (price tracking + TimesFM forecast) ────────────────────────
+  // ── STOCKS ───────────────────────────────────────────────────────────────────────────────
   let stocksReady = false, lastStock = null;
   async function loadWatchlist() {
     try {
@@ -862,12 +847,10 @@
     const span = (hi - lo) || 1; lo -= span * 0.08; hi += span * 0.08;
     const X = (i) => pad + (i / (total - 1)) * (w - pad - padR);
     const Y = (v) => h - pad - ((v - lo) / (hi - lo)) * (h - 2 * pad);
-    // grid + price axis
     c.strokeStyle = "rgba(255,255,255,0.06)"; c.fillStyle = "#6b7886"; c.font = "9px 'IBM Plex Mono', monospace";
     for (let g = 0; g <= 4; g++) { const v = lo + (hi - lo) * g / 4, y = Y(v);
       c.beginPath(); c.moveTo(pad, y); c.lineTo(w - padR, y); c.stroke();
       c.fillText(v.toFixed(2), w - padR + 4, y + 3); }
-    // forecast band
     if (fc.length) {
       c.beginPath();
       c.moveTo(X(hist.length - 1), Y(hist[hist.length - 1].close));
@@ -875,13 +858,10 @@
       for (let i = fc.length - 1; i >= 0; i--) c.lineTo(X(hist.length + i), Y(fc[i].lo));
       c.closePath(); c.fillStyle = "rgba(56,225,255,0.12)"; c.fill();
     }
-    // history line
     c.beginPath(); hist.forEach((p, i) => i ? c.lineTo(X(i), Y(p.close)) : c.moveTo(X(i), Y(p.close)));
     c.strokeStyle = "#ff9e1b"; c.lineWidth = 1.4; c.stroke();
-    // "now" divider
     c.beginPath(); c.moveTo(X(hist.length - 1), pad); c.lineTo(X(hist.length - 1), h - pad);
     c.strokeStyle = "rgba(255,255,255,0.2)"; c.setLineDash([3, 3]); c.lineWidth = 1; c.stroke(); c.setLineDash([]);
-    // forecast line
     c.beginPath(); c.moveTo(X(hist.length - 1), Y(hist[hist.length - 1].close));
     fc.forEach((p, i) => c.lineTo(X(hist.length + i), Y(p.yhat)));
     c.strokeStyle = "#38e1ff"; c.lineWidth = 1.6; c.setLineDash([5, 3]); c.stroke(); c.setLineDash([]);
@@ -891,7 +871,7 @@
     const t = (ticker || $("stock-ticker").value).trim();
     if (!t) return;
     const hz = horizon || $("stock-horizon").value;
-    $("stocks-info").innerHTML = '<div class="loading">fetching prices & forecasting…</div>';
+    $("stocks-info").innerHTML = '<div class="loading">fetching prices &amp; forecasting…</div>';
     try {
       const d = await getJSON(`/api/stocks/${encodeURIComponent(t)}?horizon=${hz}`);
       if (d.error) { $("stocks-info").innerHTML = `<div class="err">${esc(d.error)}</div>`; return; }
@@ -902,11 +882,11 @@
       $("stocks-sub").textContent = `${d.ticker} · ${d.symbol} · ${meth}`;
       $("stocks-info").innerHTML =
         `<div class="stk-row"><span class="stk-big">${esc(d.last)}</span>` +
-        `<span class="${d.change_pct >= 0 ? "up" : "down"}">${d.change_pct >= 0 ? "▲" : "▼"} ${esc(d.change_pct)}% today</span>` +
+        `<span class="${d.change_pct >= 0 ? "up" : "down'}">${d.change_pct >= 0 ? "▲" : "▼"} ${esc(d.change_pct)}% today</span>` +
         (d.simulated ? '<span class="agent-mode offline">SIM</span>' : "") + "</div>" +
         `<div class="stk-grid">` +
-        `<div class="kv"><span>FORECAST (${esc(d.horizon)}d)</span><b class="${up ? "up" : "down"}">${esc(d.predicted)}</b></div>` +
-        `<div class="kv"><span>EXPECTED MOVE</span><b class="${up ? "up" : "down"}">${up ? "+" : ""}${esc(d.predicted_change_pct)}%</b></div>` +
+        `<div class="kv"><span>FORECAST (${esc(d.horizon)}d)</span><b class="${up ? "up" : "down'}">${esc(d.predicted)}</b></div>` +
+        `<div class="kv"><span>EXPECTED MOVE</span><b class="${up ? "up" : "down'}">${up ? "+" : ""}${esc(d.predicted_change_pct)}%</b></div>` +
         `<div class="kv"><span>METHOD</span><b>${esc(meth)}</b></div>` +
         `<div class="kv"><span>RANGE</span><b>${esc(d.forecast[d.forecast.length - 1].lo)} – ${esc(d.forecast[d.forecast.length - 1].hi)}</b></div>` +
         `</div><p class="dev-note">Forecasts are model estimates with an ~80% confidence band, not investment advice.</p>`;
@@ -919,33 +899,46 @@
   $("stock-horizon").addEventListener("change", () => { if (lastStock) runStock(lastStock.ticker); });
   window.addEventListener("resize", () => { if (lastStock && $("view-stocks").classList.contains("active")) drawStockChart(lastStock); });
 
-  // ── settings modal (paste API keys) ───────────────────────────────────
+  // ── settings modal (paste API keys) ───────────────────────────────────────────────────────
   const modal = $("settings-modal");
+  const PROVIDER_IDS = ["google", "groq", "cerebras", "openrouter", "mistral", "cohere", "huggingface", "deepseek"];
+
   function stateLabel(p) {
     if (!p) return "";
-    if (p.configured) return p.source === "ui" ? "● set (this session)" : "● set (env)";
+    if (p.configured) return p.source === "ui" ? "● active (UI)" : "● active (env)";
     return "○ not set";
   }
+
   async function openSettings() {
     try {
       const s = await getJSON("/api/settings");
-      $("ds-state").textContent = stateLabel(s.deepseek);
-      $("ds-state").className = "key-state " + (s.deepseek.configured ? "ok" : "off");
+      for (const pid of PROVIDER_IDS) {
+        const st = $(`${pid}-state`);
+        if (st && s[pid]) {
+          st.textContent = stateLabel(s[pid]);
+          st.className = "key-state " + (s[pid].configured ? "ok" : "off");
+        }
+      }
       if (s.hibp) {
         $("hibp-state").textContent = stateLabel(s.hibp);
         $("hibp-state").className = "key-state " + (s.hibp.configured ? "ok" : "off");
       }
     } catch (e) { /* ignore */ }
-    $("ds-key").value = "";
+    PROVIDER_IDS.forEach(pid => { const el = $(`${pid}-key`); if (el) el.value = ""; });
     $("hibp-key").value = "";
     $("settings-msg").textContent = "";
     modal.hidden = false;
   }
+
   function closeSettings() { modal.hidden = true; }
+
   async function saveSettings(clear) {
-    // Empty string clears; only send the field if the operator touched it.
     const body = {};
-    if (clear || $("ds-key").value) body.deepseek_api_key = clear ? "" : $("ds-key").value;
+    for (const pid of PROVIDER_IDS) {
+      const el = $(`${pid}-key`);
+      if (!el) continue;
+      if (clear || el.value) body[`${pid}_api_key`] = clear ? "" : el.value;
+    }
     if (clear || $("hibp-key").value) body.hibp_api_key = clear ? "" : $("hibp-key").value;
     $("settings-msg").textContent = "saving…";
     try {
@@ -955,19 +948,20 @@
         body: JSON.stringify(body),
       });
       $("settings-msg").textContent = clear ? "cleared." : "saved.";
-      loadStatus();                       // flip AI CORE pill
-      setTimeout(openSettings, 300);      // refresh the state labels
+      loadStatus();
+      setTimeout(openSettings, 300);
     } catch (e) {
       $("settings-msg").textContent = "save failed";
     }
   }
+
   $("settings-btn").addEventListener("click", openSettings);
   $("settings-close").addEventListener("click", closeSettings);
   $("settings-save").addEventListener("click", () => saveSettings(false));
   $("settings-clear").addEventListener("click", () => saveSettings(true));
   modal.addEventListener("click", (e) => { if (e.target === modal) closeSettings(); });
 
-  // ── boot ─────────────────────────────────────────────────────────────
+  // ── boot ─────────────────────────────────────────────────────────────────────────────
   function refreshAll() {
     loadStatus();
     loadNews();
@@ -983,12 +977,9 @@
   refreshAll();
   setInterval(refreshAll, REFRESH_MS);
 
-  // PWA home-screen shortcuts deep-link in via ?cmd=BRIEF|NEWS|SURV.
   const wanted = new URLSearchParams(location.search).get("cmd");
   if (wanted) setTimeout(() => handleInput(wanted), 600);
 
-  // Android "Add to Home screen" — surface a one-tap install button when the
-  // browser offers it, instead of burying it in the menu.
   let deferredPrompt = null;
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
@@ -1004,6 +995,5 @@
     });
   });
 
-  // Don't steal focus / pop the keyboard on touch devices.
   if (!window.matchMedia("(pointer: coarse)").matches) $("cmd").focus();
 })();
